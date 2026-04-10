@@ -1,0 +1,448 @@
+{# templates/dbadmin/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Administration BDD — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_dbadmin') }}" class="active">🛠 Admin BDD</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">🛠 Administration de la base de données</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            ⚠ Zone réservée aux administrateurs — toutes les opérations sont irréversibles et journalisées.
+        </p>
+
+        {% for type in ['success','danger','warning'] %}
+            {% for msg in app.flashes(type) %}
+                <div class="alert alert-{{ type == 'danger' ? 'danger' : 'success' }}"
+                     style="{% if type == 'warning' %}background:#2d2000;color:#fbd38d;border-color:#d69e2e;{% endif %}">
+                    {{ msg }}
+                </div>
+            {% endfor %}
+        {% endfor %}
+
+        {# ============================================================ #}
+        {# ONGLETS #}
+        {# ============================================================ #}
+        <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:0;">
+            {% for tab, label in {
+                backup:      '💾 Sauvegarde / Restauration',
+                import:      '📥 Import SQL',
+                create:      '➕ Créer une table',
+                alter:       '✏️ Modifier une table',
+                drop:        '🗑 Supprimer une table'
+            } %}
+            <button onclick="showTab('{{ tab }}')" id="btn-{{ tab }}"
+                    style="padding:9px 16px;font-size:13px;border:none;border-bottom:2px solid transparent;
+                           background:transparent;color:var(--color-text-secondary);cursor:pointer;border-radius:6px 6px 0 0;
+                           transition:all .15s;">
+                {{ label }}
+            </button>
+            {% endfor %}
+        </div>
+
+        {# ============================================================ #}
+        {# TAB : SAUVEGARDE / RESTAURATION #}
+        {# ============================================================ #}
+        <div id="tab-backup">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+                {# Nouvelle sauvegarde #}
+                <div class="card">
+                    <div class="card-title">💾 Créer une sauvegarde</div>
+                    <p style="font-size:13px;opacity:.6;margin-bottom:16px;">
+                        Génère un dump SQL complet de la base via <code>mysqldump</code>.
+                        Le fichier est stocké dans <code>var/backups/</code>.
+                    </p>
+                    <form method="post" action="{{ path('app_dbadmin_backup') }}">
+                        <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                        <button type="submit" class="btn btn-success"
+                                onclick="return confirm('Lancer la sauvegarde maintenant ?');">
+                            💾 Lancer la sauvegarde
+                        </button>
+                    </form>
+                </div>
+
+                {# Restauration depuis un backup #}
+                <div class="card">
+                    <div class="card-title">🔄 Restaurer depuis un backup</div>
+                    <p style="font-size:13px;color:#fc8181;margin-bottom:12px;">
+                        ⚠ Cette opération écrase toutes les données actuelles.
+                    </p>
+                    {% if backups|length == 0 %}
+                        <p style="font-size:13px;opacity:.5;">Aucune sauvegarde disponible.</p>
+                    {% else %}
+                        {% for bk in backups %}
+                        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.07);">
+                            <div style="flex:1;font-size:12px;">
+                                <div style="font-weight:500;">{{ bk.filename }}</div>
+                                <div style="opacity:.5;">{{ bk.date }} — {{ bk.size }}</div>
+                            </div>
+                            <a href="{{ path('app_dbadmin_backup_download', {filename: bk.filename}) }}"
+                               class="btn btn-secondary btn-sm">⬇</a>
+                            <form method="post" action="{{ path('app_dbadmin_restore', {filename: bk.filename}) }}"
+                                  onsubmit="return confirm('ATTENTION : restaurer {{ bk.filename }} va écraser toutes les données. Confirmer ?');">
+                                <input type="hidden" name="_token" value="{{ csrf_token('restore_' ~ bk.filename) }}">
+                                <button type="submit" class="btn btn-sm" style="background:#744210;color:#fbd38d;">🔄</button>
+                            </form>
+                            <form method="post" action="{{ path('app_dbadmin_backup_delete', {filename: bk.filename}) }}"
+                                  onsubmit="return confirm('Supprimer ce backup ?');">
+                                <input type="hidden" name="_token" value="{{ csrf_token('del_backup_' ~ bk.filename) }}">
+                                <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ============================================================ #}
+        {# TAB : IMPORT SQL #}
+        {# ============================================================ #}
+        <div id="tab-import" style="display:none;">
+            <div class="card">
+                <div class="card-title">📥 Importer un fichier SQL</div>
+                <p style="font-size:13px;opacity:.6;margin-bottom:16px;">
+                    Importez un fichier <code>.sql</code> — peut contenir des CREATE TABLE, INSERT, etc.
+                    Les instructions sont exécutées séquentiellement.
+                </p>
+                <form method="post" action="{{ path('app_dbadmin_import') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <div class="form-group">
+                        <label>Fichier SQL à importer</label>
+                        <input type="file" name="sql_file" class="form-control" accept=".sql" required>
+                    </div>
+                    <button type="submit" class="btn btn-success"
+                            onclick="return confirm('Importer ce fichier SQL ? Les instructions seront exécutées immédiatement.');">
+                        📥 Importer
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {# ============================================================ #}
+        {# TAB : CRÉER UNE TABLE #}
+        {# ============================================================ #}
+        <div id="tab-create" style="display:none;">
+            <div class="card">
+                <div class="card-title">➕ Créer une nouvelle table</div>
+                <p style="font-size:13px;opacity:.6;margin-bottom:16px;">
+                    Une colonne <code>id</code> AUTO_INCREMENT PRIMARY KEY est ajoutée automatiquement.
+                </p>
+                <form method="post" action="{{ path('app_dbadmin_table_create') }}">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+
+                    <div class="form-group" style="max-width:300px;">
+                        <label>Nom de la table *</label>
+                        <input type="text" name="table_name" class="form-control" required
+                               pattern="[a-zA-Z0-9_]+" placeholder="ex: comitemaore_xxx">
+                    </div>
+
+                    <div style="font-size:13px;font-weight:600;margin:16px 0 8px;">Colonnes</div>
+                    <div id="fields-container">
+                        <div class="field-row" style="display:grid;grid-template-columns:2fr 1fr 80px 60px 1fr auto;gap:8px;margin-bottom:8px;align-items:end;">
+                            <div><label style="font-size:11px;">Nom</label>
+                                <input type="text" name="fields[0][name]" class="form-control" placeholder="nom_colonne" pattern="[a-zA-Z0-9_]+"></div>
+                            <div><label style="font-size:11px;">Type</label>
+                                <select name="fields[0][type]" class="form-control">
+                                    {% for t in fieldTypes %}<option>{{ t }}</option>{% endfor %}
+                                </select></div>
+                            <div><label style="font-size:11px;">Longueur</label>
+                                <input type="number" name="fields[0][length]" class="form-control" min="0" value="255"></div>
+                            <div><label style="font-size:11px;">NULL</label>
+                                <select name="fields[0][nullable]" class="form-control">
+                                    <option value="no">Non</option><option value="yes">Oui</option>
+                                </select></div>
+                            <div><label style="font-size:11px;">Défaut</label>
+                                <input type="text" name="fields[0][default]" class="form-control" placeholder=""></div>
+                            <div style="padding-top:18px;">
+                                <button type="button" onclick="this.closest('.field-row').remove()"
+                                        style="background:#742a2a;color:#fc8181;border:none;border-radius:4px;padding:6px 10px;cursor:pointer;">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="addField()" class="btn btn-secondary btn-sm" style="margin-bottom:16px;">
+                        + Ajouter une colonne
+                    </button>
+
+                    <div>
+                        <button type="submit" class="btn btn-success">
+                            ➕ Créer la table
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# ============================================================ #}
+        {# TAB : MODIFIER UNE TABLE #}
+        {# ============================================================ #}
+        <div id="tab-alter" style="display:none;">
+            <div class="card">
+                <div class="card-title">✏️ Modifier une table</div>
+
+                <div class="form-group" style="max-width:300px;margin-bottom:20px;">
+                    <label>Table à modifier</label>
+                    <select id="alter-table-select" class="form-control" onchange="loadColumns(this.value)">
+                        <option value="">-- Choisir une table --</option>
+                        {% for t in tables %}
+                            <option value="{{ t }}">{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {# Sous-onglets actions #}
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+                    {% for act, lbl in {
+                        add_column:    '+ Ajouter colonne',
+                        drop_column:   '− Supprimer colonne',
+                        modify_column: '~ Modifier colonne',
+                        rename_column: '↔ Renommer colonne',
+                        rename_table:  '✎ Renommer la table'
+                    } %}
+                    <button onclick="showAlterAction('{{ act }}')" id="abtn-{{ act }}"
+                            style="padding:7px 13px;font-size:12px;border:1px solid rgba(255,255,255,.2);
+                                   background:transparent;color:var(--color-text-secondary);border-radius:6px;cursor:pointer;">
+                        {{ lbl }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                {# Ajouter colonne #}
+                <form method="post" action="{{ path('app_dbadmin_table_alter') }}" id="form-add_column" style="display:none;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <input type="hidden" name="alter_action" value="add_column">
+                    <input type="hidden" name="table" id="alter-table-add_column">
+                    <div style="display:grid;grid-template-columns:2fr 1fr 80px 60px 1fr;gap:12px;">
+                        <div class="form-group"><label>Nom de la colonne</label>
+                            <input type="text" name="col_name" class="form-control" required pattern="[a-zA-Z0-9_]+"></div>
+                        <div class="form-group"><label>Type</label>
+                            <select name="col_type" class="form-control">{% for t in fieldTypes %}<option>{{ t }}</option>{% endfor %}</select></div>
+                        <div class="form-group"><label>Longueur</label>
+                            <input type="number" name="col_length" class="form-control" min="0" value="255"></div>
+                        <div class="form-group"><label>NULL</label>
+                            <select name="col_nullable" class="form-control"><option value="no">Non</option><option value="yes">Oui</option></select></div>
+                        <div class="form-group"><label>Après colonne</label>
+                            <select name="col_after" id="col-after-select" class="form-control">
+                                <option value="">— en dernier —</option>
+                            </select></div>
+                    </div>
+                    <button type="submit" class="btn btn-success">+ Ajouter la colonne</button>
+                </form>
+
+                {# Supprimer colonne #}
+                <form method="post" action="{{ path('app_dbadmin_table_alter') }}" id="form-drop_column" style="display:none;"
+                      onsubmit="return confirm('Supprimer définitivement cette colonne et toutes ses données ?');">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <input type="hidden" name="alter_action" value="drop_column">
+                    <input type="hidden" name="table" id="alter-table-drop_column">
+                    <div class="form-group" style="max-width:300px;">
+                        <label>Colonne à supprimer</label>
+                        <select name="col_name" id="drop-col-select" class="form-control" required>
+                            <option value="">-- Choisir --</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-danger">− Supprimer la colonne</button>
+                </form>
+
+                {# Modifier colonne #}
+                <form method="post" action="{{ path('app_dbadmin_table_alter') }}" id="form-modify_column" style="display:none;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <input type="hidden" name="alter_action" value="modify_column">
+                    <input type="hidden" name="table" id="alter-table-modify_column">
+                    <div style="display:grid;grid-template-columns:2fr 1fr 80px 60px;gap:12px;">
+                        <div class="form-group"><label>Colonne à modifier</label>
+                            <select name="col_name" id="modify-col-select" class="form-control" required>
+                                <option value="">-- Choisir --</option>
+                            </select></div>
+                        <div class="form-group"><label>Nouveau type</label>
+                            <select name="col_type" class="form-control">{% for t in fieldTypes %}<option>{{ t }}</option>{% endfor %}</select></div>
+                        <div class="form-group"><label>Longueur</label>
+                            <input type="number" name="col_length" class="form-control" min="0" value="255"></div>
+                        <div class="form-group"><label>NULL</label>
+                            <select name="col_nullable" class="form-control"><option value="no">Non</option><option value="yes">Oui</option></select></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">~ Modifier la colonne</button>
+                </form>
+
+                {# Renommer colonne #}
+                <form method="post" action="{{ path('app_dbadmin_table_alter') }}" id="form-rename_column" style="display:none;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <input type="hidden" name="alter_action" value="rename_column">
+                    <input type="hidden" name="table" id="alter-table-rename_column">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+                        <div class="form-group"><label>Colonne actuelle</label>
+                            <select name="col_old" id="rename-col-select" class="form-control" required>
+                                <option value="">-- Choisir --</option>
+                            </select></div>
+                        <div class="form-group"><label>Nouveau nom</label>
+                            <input type="text" name="col_new" class="form-control" required pattern="[a-zA-Z0-9_]+"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">↔ Renommer la colonne</button>
+                </form>
+
+                {# Renommer table #}
+                <form method="post" action="{{ path('app_dbadmin_table_alter') }}" id="form-rename_table" style="display:none;">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <input type="hidden" name="alter_action" value="rename_table">
+                    <input type="hidden" name="table" id="alter-table-rename_table">
+                    <div class="form-group" style="max-width:300px;">
+                        <label>Nouveau nom de la table</label>
+                        <input type="text" name="new_table_name" class="form-control" required pattern="[a-zA-Z0-9_]+">
+                    </div>
+                    <button type="submit" class="btn btn-primary"
+                            onclick="return confirm('Renommer cette table ?');">✎ Renommer la table</button>
+                </form>
+            </div>
+        </div>
+
+        {# ============================================================ #}
+        {# TAB : SUPPRIMER UNE TABLE #}
+        {# ============================================================ #}
+        <div id="tab-drop" style="display:none;">
+            <div class="card">
+                <div class="card-title" style="color:#fc8181;">🗑 Supprimer une table</div>
+                <p style="font-size:13px;color:#fc8181;margin-bottom:16px;">
+                    ⚠ Cette opération est <strong>irréversible</strong>. Toutes les données seront perdues.
+                    Pour confirmer, saisissez exactement le nom de la table.
+                </p>
+                <form method="post" action="{{ path('app_dbadmin_table_drop') }}"
+                      onsubmit="return confirm('DERNIÈRE CONFIRMATION : supprimer définitivement cette table et toutes ses données ?');">
+                    <input type="hidden" name="_token" value="{{ csrf_token('dbadmin') }}">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px;">
+                        <div class="form-group">
+                            <label>Table à supprimer</label>
+                            <select name="table" id="drop-table-select" class="form-control" required
+                                    onchange="document.getElementById('drop-confirm-hint').textContent = this.value;">
+                                <option value="">-- Choisir --</option>
+                                {% for t in tables %}
+                                    <option value="{{ t }}">{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Confirmer en tapant le nom : <strong id="drop-confirm-hint" style="color:#fc8181;"></strong></label>
+                            <input type="text" name="confirm_name" class="form-control" required
+                                   placeholder="Tapez exactement le nom de la table"
+                                   style="border-color:#e53e3e;">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-danger">🗑 Supprimer définitivement</button>
+                </form>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<style>
+    code { font-family:'Courier New',monospace;font-size:12px;background:rgba(255,255,255,.08);padding:2px 5px;border-radius:3px; }
+    .btn-primary { background:#4299e1;color:#fff; }
+    .btn-primary:hover { background:#3182ce; }
+</style>
+
+<script>
+const TABS = ['backup','import','create','alter','drop'];
+function showTab(name) {
+    TABS.forEach(t => {
+        document.getElementById('tab-'+t).style.display = t===name ? 'block' : 'none';
+        const btn = document.getElementById('btn-'+t);
+        btn.style.borderBottomColor  = t===name ? '#4299e1' : 'transparent';
+        btn.style.color              = t===name ? '#90cdf4' : '';
+        btn.style.backgroundColor    = t===name ? 'rgba(66,153,225,.1)' : 'transparent';
+    });
+}
+showTab('backup');
+
+let fieldIdx = 1;
+function addField() {
+    const i   = fieldIdx++;
+    const types = {{ fieldTypes|json_encode|raw }};
+    const opts  = types.map(t => `<option>${t}</option>`).join('');
+    const row   = document.createElement('div');
+    row.className = 'field-row';
+    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 80px 60px 1fr auto;gap:8px;margin-bottom:8px;align-items:end;';
+    row.innerHTML = `
+        <div><label style="font-size:11px;">Nom</label>
+            <input type="text" name="fields[${i}][name]" class="form-control" placeholder="nom_colonne" pattern="[a-zA-Z0-9_]+"></div>
+        <div><label style="font-size:11px;">Type</label>
+            <select name="fields[${i}][type]" class="form-control">${opts}</select></div>
+        <div><label style="font-size:11px;">Longueur</label>
+            <input type="number" name="fields[${i}][length]" class="form-control" min="0" value="255"></div>
+        <div><label style="font-size:11px;">NULL</label>
+            <select name="fields[${i}][nullable]" class="form-control">
+                <option value="no">Non</option><option value="yes">Oui</option>
+            </select></div>
+        <div><label style="font-size:11px;">Défaut</label>
+            <input type="text" name="fields[${i}][default]" class="form-control"></div>
+        <div style="padding-top:18px;">
+            <button type="button" onclick="this.closest('.field-row').remove()"
+                    style="background:#742a2a;color:#fc8181;border:none;border-radius:4px;padding:6px 10px;cursor:pointer;">✕</button>
+        </div>`;
+    document.getElementById('fields-container').appendChild(row);
+}
+
+const ALTER_ACTIONS = ['add_column','drop_column','modify_column','rename_column','rename_table'];
+function showAlterAction(name) {
+    ALTER_ACTIONS.forEach(a => {
+        document.getElementById('form-'+a).style.display = a===name ? 'block' : 'none';
+        const btn = document.getElementById('abtn-'+a);
+        btn.style.borderColor       = a===name ? '#4299e1' : 'rgba(255,255,255,.2)';
+        btn.style.color             = a===name ? '#90cdf4' : '';
+        btn.style.backgroundColor   = a===name ? 'rgba(66,153,225,.1)' : 'transparent';
+    });
+}
+
+let cachedColumns = [];
+function loadColumns(table) {
+    ALTER_ACTIONS.forEach(a => {
+        const el = document.getElementById('alter-table-' + a);
+        if (el) el.value = table;
+    });
+    if (!table) return;
+    fetch(`/dbadmin/table/${encodeURIComponent(table)}/columns`)
+        .then(r => r.json())
+        .then(cols => {
+            cachedColumns = cols;
+            const selects = ['drop-col-select','modify-col-select','rename-col-select','col-after-select'];
+            selects.forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const first = sel.options[0];
+                sel.innerHTML = '';
+                sel.appendChild(first.cloneNode(true));
+                cols.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.name;
+                    opt.textContent = `${c.name} (${c.type})`;
+                    sel.appendChild(opt);
+                });
+            });
+        });
+}
+</script>
+{% endblock %}

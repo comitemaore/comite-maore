@@ -1,0 +1,140 @@
+{# templates/document/list.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Documents — {{ adherent.prenom_adht }} {{ adherent.nom_adht }}{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
+        {% else %}<span class="badge badge-user">USER</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_search') }}">🔍 Recherche</a>
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
+                    📁 Documents
+                </h1>
+                <p style="font-size:13px;opacity:.6;">
+                    {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
+                    — <a href="{{ path('app_adherent_show', {id: adherent.id_adht}) }}"
+                         style="color:inherit;opacity:.7;">← Retour à la fiche</a>
+                </p>
+            </div>
+            <a href="{{ path('app_document_upload', {idAdht: adherent.id_adht}) }}"
+               class="btn btn-success">+ Ajouter un document</a>
+        </div>
+
+        {% for msg in app.flashes('success') %}
+            <div class="alert alert-success">{{ msg }}</div>
+        {% endfor %}
+        {% for msg in app.flashes('danger') %}
+            <div class="alert alert-danger">{{ msg }}</div>
+        {% endfor %}
+
+        {% if documents|length == 0 %}
+            <div class="card" style="text-align:center;padding:48px;">
+                <div style="font-size:40px;margin-bottom:12px;">📭</div>
+                <div style="font-size:15px;font-weight:500;margin-bottom:6px;">Aucun document</div>
+                <div style="font-size:13px;opacity:.5;margin-bottom:16px;">
+                    Aucun document n'a encore été ajouté pour cet adhérent.
+                </div>
+                <a href="{{ path('app_document_upload', {idAdht: adherent.id_adht}) }}"
+                   class="btn btn-success">+ Ajouter un document</a>
+            </div>
+        {% else %}
+            <div class="card" style="padding:0;overflow:hidden;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Titre</th>
+                            <th>Type</th>
+                            <th>Fichier original</th>
+                            <th>Taille</th>
+                            <th>Uploadé le</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in documents %}
+                        <tr>
+                            <td style="font-size:12px;opacity:.5;">{{ doc.id_doc }}</td>
+                            <td><strong>{{ doc.titre_doc }}</strong></td>
+                            <td>
+                                {% if doc.type_doc %}
+                                    <span style="display:inline-block;padding:2px 8px;border-radius:4px;
+                                                 font-size:11px;background:rgba(255,255,255,.08);">
+                                        {{ doc.type_doc }}
+                                    </span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td style="font-size:12px;">
+                                {% if doc.mime_type starts with 'image/' %}📷
+                                {% elseif doc.mime_type == 'application/pdf' %}📄
+                                {% else %}📎{% endif %}
+                                {{ doc.nom_fichier }}
+                            </td>
+                            <td style="font-size:12px;opacity:.7;">
+                                {% if doc.taille_fichier %}
+                                    {% if doc.taille_fichier >= 1048576 %}
+                                        {{ (doc.taille_fichier / 1048576)|round(1) }} Mo
+                                    {% elseif doc.taille_fichier >= 1024 %}
+                                        {{ (doc.taille_fichier / 1024)|round(0) }} Ko
+                                    {% else %}
+                                        {{ doc.taille_fichier }} o
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td style="font-size:12px;opacity:.7;">
+                                {{ doc.date_upload|date('d/m/Y H:i') }}
+                            </td>
+                            <td style="display:flex;gap:6px;">
+                                <a href="/{{ doc.chemin_fichier }}" target="_blank"
+                                   class="btn btn-secondary btn-sm" title="Ouvrir">👁</a>
+                                <a href="/{{ doc.chemin_fichier }}" download="{{ doc.nom_fichier }}"
+                                   class="btn btn-secondary btn-sm" title="Télécharger">⬇</a>
+                                <form method="post"
+                                      action="{{ path('app_document_delete', {idDoc: doc.id_doc}) }}"
+                                      onsubmit="return confirm('Supprimer ce document ?');">
+                                    <input type="hidden" name="_token"
+                                           value="{{ csrf_token('del_doc_' ~ doc.id_doc) }}">
+                                    <button type="submit" class="btn btn-danger btn-sm"
+                                            title="Supprimer">🗑</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </main>
+</div>
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+</style>
+{% endblock %}

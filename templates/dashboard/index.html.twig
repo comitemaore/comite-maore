@@ -1,0 +1,118 @@
+{# templates/dashboard/index.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Tableau de bord — Comité Maore{% endblock %}
+{% block body_theme %}{{ theme }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">
+         Comité Maore
+    </a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">
+            Connecté : <strong>{{ username }}</strong>
+        </span>
+        {% if is_admin %}
+            <span class="badge badge-admin">ADMIN</span>
+        {% else %}
+            <span class="badge badge-user">UTILISATEUR</span>
+        {% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    {# SIDEBAR #}
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}" class="active">
+            📊 Tableau de bord
+        </a>
+        <a href="{{ path('app_adherent_list') }}">
+            👥 Adhérents</a>
+        <a href="{{ path('app_search') }}">
+            🔍 Recherche
+        </a>
+        {% if is_admin %}
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_database') }}">
+            ✏️ Modifier la BDD
+        </a>
+        <a href="{{ path('app_dbadmin') }}">🛠 Admin BDD</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">
+            🚪 Déconnexion
+        </a>
+    </aside>
+
+    {# CONTENU PRINCIPAL #}
+    <main class="main-content">
+        <h1 style="font-size:24px;font-weight:700;margin-bottom:6px;">
+            Tableau de bord
+        </h1>
+        <p style="font-size:14px;opacity:.6;margin-bottom:28px;">
+            Base de données du Comité Maore
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:28px;">
+            <div class="card" style="text-align:center;">
+                <div style="font-size:36px;margin-bottom:8px;">🔍</div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Recherche</div>
+                <div style="font-size:12px;opacity:.6;margin-bottom:12px;">Consulter les données</div>
+                <a href="{{ path('app_search') }}" class="btn btn-primary btn-sm">Accéder</a>
+            </div>
+
+            {% if is_admin %}
+            <div class="card" style="text-align:center;">
+                <div style="font-size:36px;margin-bottom:8px;">✏️</div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Modifier BDD</div>
+                <div style="font-size:12px;opacity:.6;margin-bottom:12px;">INSERT / UPDATE / DELETE</div>
+                <a href="{{ path('app_database') }}" class="btn btn-primary btn-sm">Accéder</a>
+            </div>
+
+            <div class="card" style="text-align:center;">
+                <div style="font-size:36px;margin-bottom:8px;">⚙️</div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Administration</div>
+                <div style="font-size:12px;opacity:.6;margin-bottom:12px;">Gestion complète</div>
+                <span class="badge" style="background:#f6ad55;color:#744210;">Accès admin</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-title">Informations de session</div>
+            <table class="table">
+                <tbody>
+                    <tr>
+                        <td style="width:40%;font-weight:500;">Utilisateur</td>
+                        <td>{{ username }}</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:500;">Rôle</td>
+                        <td>{{ is_admin ? 'Administrateur' : 'Utilisateur' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:500;">Thème</td>
+                        <td>{{ theme == 'dark' ? 'Sombre (Admin)' : 'Bleu ciel (User)' }}</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:500;">Date</td>
+                        <td>{{ "now"|date("d/m/Y H:i") }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<style>
+    body.theme-dark  .btn-primary { background: #4299e1; color: #fff; }
+    body.theme-sky   .btn-primary { background: #2b6cb0; color: #fff; }
+    body.theme-dark  .btn-primary:hover { background: #3182ce; }
+    body.theme-sky   .btn-primary:hover { background: #2c5282; }
+</style>
+{% endblock %}

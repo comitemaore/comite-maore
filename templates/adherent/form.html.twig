@@ -1,0 +1,173 @@
+{# templates/adherent/form.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}{{ mode == 'nouveau' ? 'Nouvel adhérent' : 'Modifier adhérent' }} — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+{% block navbar %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+  <!-- 🌿 -->
+  <div class="navbar-right">
+    <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary btn-sm">← Retour</a>
+    <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <a href="{{ path('app_adherent_list') }}" class="active">👥 Adhérents</a>
+    <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+    {% if is_admin %}
+    <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+    <a href="{{ path('app_log_list') }}">📋 Logs</a>
+    {% endif %}
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+
+  <main class="main-content">
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
+      {{ mode == 'nouveau' ? '➕ Nouvel adhérent' : '✏️ Modifier adhérent' }}
+    </h1>
+    <p style="font-size:13px;opacity:.55;margin-bottom:20px;">
+      ⚠ Cette opération nécessite l'approbation de 3 administrateurs avant d'être effective.
+    </p>
+
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+    <form method="post">
+      <div class="card">
+        <div class="card-title">Identité</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label>Civilité</label>
+            <select name="civilite_adht" class="form-control">
+              {% for c in ['M.','Mme','Mlle','Dr','Pr'] %}
+                <option value="{{ c }}" {{ adherent.civilite_adht ?? '' == c ? 'selected' : '' }}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Prénom *</label>
+            <input type="text" name="prenom_adht" class="form-control" required
+                   value="{{ adherent.prenom_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Nom *</label>
+            <input type="text" name="nom_adht" class="form-control" required
+                   value="{{ adherent.nom_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Date de naissance</label>
+            <input type="date" name="datenaisance_adht" class="form-control"
+                   value="{{ adherent.datenaisance_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Profession</label>
+            <input type="text" name="profession_adht" class="form-control"
+                   value="{{ adherent.profession_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Promotion</label>
+            <input type="text" name="promotion_adht" class="form-control"
+                   value="{{ adherent.promotion_adht ?? '' }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Coordonnées</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Adresse</label>
+            <input type="text" name="adresse_adht" class="form-control"
+                   value="{{ adherent.adresse_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Code postal</label>
+            <input type="text" name="cp_adht" class="form-control"
+                   value="{{ adherent.cp_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Ville</label>
+            <input type="text" name="ville_adht" class="form-control"
+                   value="{{ adherent.ville_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Téléphone fixe</label>
+            <input type="tel" name="telephonef_adht" class="form-control"
+                   value="{{ adherent.telephonef_adht ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Téléphone portable</label>
+            <input type="tel" name="telephonep_adht" class="form-control"
+                   value="{{ adherent.telephonep_adht ?? '' }}">
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Email</label>
+            <input type="email" name="email_adht" class="form-control"
+                   value="{{ adherent.email_adht ?? '' }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Section & Statut</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label>Section</label>
+            <select name="id_section" class="form-control" {{ not is_admin ? 'disabled' : '' }}>
+              <option value="">-- Choisir --</option>
+              {% for s in sections %}
+                <option value="{{ s.id_section }}" {{ (adherent.id_section ?? '') == s.id_section ? 'selected' : '' }}>
+                  {{ s.section }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cotisant</label>
+            <select name="cotis_adht" class="form-control">
+              <option value="Non" {{ (adherent.cotis_adht ?? 'Non') == 'Non' ? 'selected' : '' }}>Non</option>
+              <option value="Oui" {{ (adherent.cotis_adht ?? '') == 'Oui' ? 'selected' : '' }}>Oui</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Échéance cotisation</label>
+            <input type="date" name="date_echeance_cotis" class="form-control"
+                   value="{{ adherent.date_echeance_cotis ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Visible annuaire</label>
+            <select name="visibl_adht" class="form-control">
+              <option value="Non" {{ (adherent.visibl_adht ?? 'Non') == 'Non' ? 'selected' : '' }}>Non</option>
+              <option value="Oui" {{ (adherent.visibl_adht ?? '') == 'Oui' ? 'selected' : '' }}>Oui</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Disponibilités</label>
+          <textarea name="disponib_adht" class="form-control" rows="2">{{ adherent.disponib_adht ?? '' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Autres informations</label>
+          <textarea name="autres_info_adht" class="form-control" rows="2">{{ adherent.autres_info_adht ?? '' }}</textarea>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="btn btn-success">
+          {{ mode == 'nouveau' ? '📨 Soumettre la demande' : '📨 Soumettre la modification' }}
+        </button>
+        <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">Annuler</a>
+      </div>
+    </form>
+  </main>
+</div>
+<style>
+  body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+  body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+</style>
+{% endblock %}

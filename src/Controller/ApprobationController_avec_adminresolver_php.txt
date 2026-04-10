@@ -1,0 +1,205 @@
+<?php
+
+namespace App\Controller;
+
+use App\Service\AdminResolver;
+use App\Service\LogService;
+use Doctrine\DBAL\Connection;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+
+#[IsGranted('ROLE_USER')]
+#[Route('/approbation')]
+class ApprobationController extends AbstractController
+{
+    public function __construct(
+        private readonly Connection     $connection,
+        private readonly LogService     $logService,
+        private readonly AdminResolver  $adminResolver,
+    ) {}
+
+    #[Route('', name: 'app_approbation_list')]
+    public function list(): Response
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            "SELECT app.*,
+                    adht.prenom_adht, adht.nom_adht,
+                    adm.prenom_admin AS init_prenom,
+                    adm.nom_admin    AS init_nom,
+                    adm.id_section   AS init_section,
+                    (SELECT COUNT(*) FROM comitemaore_approbation_vote v
+                     WHERE v.id_approbation = app.id_approbation AND v.decision = 'approuve') AS nb_approuve,
+                    (SELECT COUNT(*) FROM comitemaore_approbation_vote v
+                     WHERE v.id_approbation = app.id_approbation) AS nb_votes
+             FROM comitemaore_approbation app
+             LEFT JOIN comitemaore_adherent adht ON app.id_adht_cible = adht.id_adht
+             LEFT JOIN comitemaore_admin    adm  ON app.id_initiateur = adm.id_admin
+             WHERE app.statut = 'en_attente'
+               AND (app.date_expiration IS NULL OR app.date_expiration > NOW())
+             ORDER BY app.date_creation DESC"
+        );
+
+        return $this->render('approbation/list.html.twig', [
+            'demandes' => $rows,
+            'is_admin' => $this->isGranted('ROLE_ADMIN'),
+            'current'  => $this->adminResolver->current(),
+        ]);
+    }
+
+    #[Route('/{id}', name: 'app_approbation_show', requirements: ['id' => '\d+'])]
+    public function show(int $id): Response
+    {
+        $currentAdmin = $this->adminResolver->current();
+
+        $approbation = $this->connection->fetchAssociative(
+            "SELECT app.*,
+                    adht.prenom_adht, adht.nom_adht,
+                    adm.prenom_admin AS init_prenom,
+                    adm.nom_admin    AS init_nom,
+                    adm.id_section   AS init_section
+             FROM comitemaore_approbation app
+             LEFT JOIN comitemaore_adherent adht ON app.id_adht_cible = adht.id_adht
+             LEFT JOIN comitemaore_admin    adm  ON app.id_initiateur = adm.id_admin
+             WHERE app.id_approbation = ?", [$id]
+        );
+        if (!$approbation) throw $this->createNotFoundException();
+
+        $votes = $this->connection->fetchAllAssociative(
+            "SELECT v.*, adm.prenom_admin, adm.nom_admin, adm.id_section
+             FROM comitemaore_approbation_vote v
+             JOIN comitemaore_admin adm ON v.id_votant = adm.id_admin
+             WHERE v.id_approbation = ?
+             ORDER BY v.date_vote", [$id]
+        );
+
+        $data       = json_decode($approbation['data_operation'] ?? '{}', true);
+        $dejaVote   = $currentAdmin && in_array($currentAdmin['id_admin'], array_column($votes, 'id_votant'));
+        $nbApprouve = count(array_filter($votes, fn($v) => $v['decision'] === 'approuve'));
+
+        return $this->render('approbation/show.html.twig', [
+            'approbation' => $approbation,
+            'votes'       => $votes,
+            'data'        => $data,
+            'deja_vote'   => $dejaVote,
+            'nb_approuve' => $nbApprouve,
+            'is_admin'    => $this->isGranted('ROLE_ADMIN'),
+            'current'     => $currentAdmin,
+        ]);
+    }
+
+    #[Route('/{id}/voter', name: 'app_approbation_voter', methods: ['POST'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function voter(int $id, Request $request): Response
+    {
+        $currentAdmin = $this->adminResolver->currentOrFallback();
+
+        $approbation = $this->connection->fetchAssociative(
+            "SELECT * FROM comitemaore_approbation WHERE id_approbation = ? AND statut = 'en_attente'",
+            [$id]
+        );
+        if (!$approbation) {
+            $this->addFlash('danger', 'Demande introuvable ou déjà traitée.');
+            return $this->redirectToRoute('app_approbation_list');
+        }
+
+        $dejaVote = $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM comitemaore_approbation_vote WHERE id_approbation = ? AND id_votant = ?',
+            [$id, $currentAdmin['id_admin']]
+        );
+        if ($dejaVote > 0) {
+            $this->addFlash('warning', 'Vous avez déjà voté pour cette demande.');
+            return $this->redirectToRoute('app_approbation_show', ['id' => $id]);
+        }
+
+        $roleVote = $this->determinerRoleVote(
+            $id,
+            (int) ($currentAdmin['id_section'] ?? 0),
+            (int) ($approbation['id_section_init'] ?? 0)
+        );
+
+        $decision    = $request->request->get('decision') === 'approuve' ? 'approuve' : 'rejete';
+        $commentaire = substr($request->request->get('commentaire', ''), 0, 500);
+
+        $this->connection->insert('comitemaore_approbation_vote', [
+            'id_approbation'    => $id,
+            'id_votant'         => $currentAdmin['id_admin'],
+            'id_section_votant' => $currentAdmin['id_section'] ?? null,
+            'role_vote'         => $roleVote,
+            'decision'          => $decision,
+            'commentaire'       => $commentaire,
+            'date_vote'         => (new \DateTime())->format('Y-m-d H:i:s'),
+        ]);
+
+        $this->logService->log("vote_approbation_{$decision}", 'succes', 'approbation', $id,
+            ['role' => $roleVote], null, $currentAdmin['login_admin']);
+
+        if ($decision === 'rejete') {
+            $this->finaliserApprobation($id, 'rejete');
+            $this->addFlash('danger', 'Demande rejetée.');
+            return $this->redirectToRoute('app_approbation_list');
+        }
+
+        $this->verifierEtFinaliser($id, $approbation);
+        $this->addFlash('success', 'Vote enregistré.');
+        return $this->redirectToRoute('app_approbation_show', ['id' => $id]);
+    }
+
+    private function determinerRoleVote(int $idApprobation, int $sectionVotant, int $sectionInit): string
+    {
+        if ($sectionVotant === $sectionInit) return 'meme_section';
+        $nb = (int) $this->connection->fetchOne(
+            "SELECT COUNT(*) FROM comitemaore_approbation_vote WHERE id_approbation = ? AND role_vote LIKE 'autre_section%'",
+            [$idApprobation]
+        );
+        return $nb === 0 ? 'autre_section_1' : 'autre_section_2';
+    }
+
+    private function verifierEtFinaliser(int $idApprobation, array $approbation): void
+    {
+        $votes = $this->connection->fetchAllAssociative(
+            "SELECT * FROM comitemaore_approbation_vote WHERE id_approbation = ? AND decision = 'approuve'",
+            [$idApprobation]
+        );
+        $roles = array_column($votes, 'role_vote');
+        if (in_array('initiateur', $roles) && in_array('meme_section', $roles)
+            && in_array('autre_section_1', $roles) && in_array('autre_section_2', $roles)) {
+            $this->finaliserApprobation($idApprobation, 'approuve');
+            $this->executerOperation($approbation);
+        }
+    }
+
+    private function finaliserApprobation(int $id, string $statut): void
+    {
+        $this->connection->update('comitemaore_approbation', [
+            'statut'          => $statut,
+            'date_resolution' => (new \DateTime())->format('Y-m-d H:i:s'),
+        ], ['id_approbation' => $id]);
+    }
+
+    private function executerOperation(array $approbation): void
+    {
+        $data = json_decode($approbation['data_operation'], true);
+        switch ($approbation['type_operation']) {
+            case 'ajout':
+                unset($data['id_adht']);
+                $data['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
+                $this->connection->insert('comitemaore_adherent', $data);
+                break;
+            case 'modification':
+                $idAdht = $data['id_adht'] ?? null;
+                if ($idAdht) {
+                    unset($data['id_adht']);
+                    $data['datemodiffiche_adht'] = (new \DateTime())->format('Y-m-d');
+                    $this->connection->update('comitemaore_adherent', $data, ['id_adht' => $idAdht]);
+                }
+                break;
+            case 'suppression':
+                $idAdht = $data['id_adht'] ?? null;
+                if ($idAdht) $this->connection->delete('comitemaore_adherent', ['id_adht' => $idAdht]);
+                break;
+        }
+    }
+}

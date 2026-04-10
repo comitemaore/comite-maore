@@ -1,0 +1,149 @@
+{# templates/cv/show.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}CV — {{ adherent.prenom_adht }} {{ adherent.nom_adht }}{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
+        {% else %}<span class="badge badge-user">USER</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_search') }}">🔍 Recherche</a>
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">📄 Curriculum Vitae</h1>
+                <p style="font-size:13px;opacity:.6;">
+                    {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
+                    {% if adherent.profession_adht %} — {{ adherent.profession_adht }}{% endif %}
+                    — <a href="{{ path('app_adherent_show', {id: adherent.id_adht}) }}"
+                         style="color:inherit;opacity:.7;">← Retour à la fiche</a>
+                </p>
+            </div>
+            <a href="{{ path('app_cv_add', {idAdht: adherent.id_adht}) }}" class="btn btn-success">
+                + Ajouter une entrée
+            </a>
+        </div>
+
+        {% for msg in app.flashes('success') %}
+            <div class="alert alert-success">{{ msg }}</div>
+        {% endfor %}
+
+        {% if entrees|length == 0 %}
+            <div class="card" style="text-align:center;padding:48px;">
+                <div style="font-size:40px;margin-bottom:12px;">📭</div>
+                <div style="font-size:15px;font-weight:500;margin-bottom:6px;">CV vide</div>
+                <div style="font-size:13px;opacity:.5;margin-bottom:16px;">
+                    Aucune entrée CV pour cet adhérent.
+                </div>
+                <a href="{{ path('app_cv_add', {idAdht: adherent.id_adht}) }}" class="btn btn-success">
+                    + Ajouter une entrée
+                </a>
+            </div>
+        {% else %}
+
+            {% set sections = {
+                etude:      {icon: '📚', label: 'Études suivies'},
+                diplome:    {icon: '🎓', label: 'Diplômes obtenus'},
+                experience: {icon: '💼', label: 'Expériences professionnelles'},
+                note:       {icon: '📝', label: 'Notes particulières'}
+            } %}
+
+            {% for type, meta in sections %}
+                {% if grouped[type] is defined and grouped[type]|length > 0 %}
+                <div class="card" style="margin-bottom:16px;">
+                    <div class="card-title">
+                        {{ meta.icon }} {{ meta.label }}
+                        <span style="font-size:12px;font-weight:400;opacity:.5;margin-left:8px;">
+                            {{ grouped[type]|length }} entrée(s)
+                        </span>
+                    </div>
+
+                    {% for entree in grouped[type] %}
+                    <div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07);
+                                display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="font-weight:600;font-size:14px;margin-bottom:4px;">
+                                {{ entree.intitule }}
+                            </div>
+                            {% if entree.etablissement %}
+                                <div style="font-size:13px;opacity:.7;margin-bottom:3px;">
+                                    🏛 {{ entree.etablissement }}
+                                </div>
+                            {% endif %}
+                            {% if entree.periode_debut or entree.periode_fin %}
+                                <div style="font-size:12px;opacity:.55;margin-bottom:3px;">
+                                    📅 {{ entree.periode_debut ?? '?' }}
+                                    {% if entree.periode_fin %} → {{ entree.periode_fin }}{% endif %}
+                                </div>
+                            {% endif %}
+                            {% if entree.mention %}
+                                <div style="font-size:12px;opacity:.7;">
+                                    ⭐ {{ entree.mention }}
+                                </div>
+                            {% endif %}
+                            {% if entree.notes_particulieres %}
+                                <div style="font-size:12px;opacity:.6;margin-top:6px;
+                                            padding:8px;border-radius:4px;
+                                            background:rgba(255,255,255,.04);font-style:italic;">
+                                    {{ entree.notes_particulieres }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div style="display:flex;gap:6px;margin-left:12px;flex-shrink:0;">
+                            <a href="{{ path('app_cv_edit', {id: entree.id_cv}) }}"
+                               class="btn btn-secondary btn-sm">✏️</a>
+                            <form method="post"
+                                  action="{{ path('app_cv_delete', {id: entree.id_cv}) }}"
+                                  onsubmit="return confirm('Supprimer cette entrée CV ?');">
+                                <input type="hidden" name="_token"
+                                       value="{{ csrf_token('del_cv_' ~ entree.id_cv) }}">
+                                <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endfor %}
+
+        {% endif %}
+
+        {# Liens vers les autres modules de l'adhérent #}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}"
+               class="btn btn-secondary btn-sm">💰 Finances</a>
+            <a href="{{ path('app_document_list', {idAdht: adherent.id_adht}) }}"
+               class="btn btn-secondary btn-sm">📁 Documents</a>
+            <a href="{{ path('app_adherent_show', {id: adherent.id_adht}) }}"
+               class="btn btn-secondary btn-sm">👤 Fiche adhérent</a>
+        </div>
+    </main>
+</div>
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+</style>
+{% endblock %}

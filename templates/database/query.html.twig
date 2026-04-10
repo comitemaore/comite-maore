@@ -1,0 +1,153 @@
+{# templates/database/query.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Modifier la BDD — Comité Maore{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_search') }}">🔍 Recherche</a>
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_database') }}" class="active">✏️ Modifier la BDD</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">✏️ Modification de la base de données</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Accès restreint — Administrateurs uniquement · Opérations autorisées : INSERT, UPDATE, DELETE
+        </p>
+
+        {# ALERTES FLASH #}
+        {% for message in app.flashes('success') %}
+            <div class="alert alert-success">✓ {{ message }}</div>
+        {% endfor %}
+
+        {# RÉSULTAT / ERREUR #}
+        {% if error %}
+            <div class="alert alert-danger">⚠ {{ error }}</div>
+        {% endif %}
+
+        {# FORMULAIRE SQL #}
+        <div class="card">
+            <div class="card-title">Éditeur de requête SQL</div>
+
+            <div style="margin-bottom:12px;font-size:12px;opacity:.6;">
+                💡 Tip : cliquez sur une table dans la liste pour insérer un modèle de requête.
+            </div>
+
+            <form method="post" action="{{ path('app_database') }}" id="queryForm">
+                <div class="form-group">
+                    <label for="sql_query">Requête SQL</label>
+                    <textarea id="sql_query" name="sql_query" class="form-control"
+                              rows="6" placeholder="INSERT INTO ma_table (col1, col2) VALUES ('val1', 'val2');
+UPDATE ma_table SET col1 = 'valeur' WHERE id = 1;
+DELETE FROM ma_table WHERE id = 1;"
+                              required>{{ last_query }}</textarea>
+                </div>
+
+                <div style="display:flex;gap:10px;align-items:center;">
+                    <button type="submit" class="btn btn-primary"
+                            onclick="return confirm('Confirmer l\'exécution de cette requête ?');">
+                        ▶ Exécuter
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="document.getElementById('sql_query').value='';">
+                        Effacer
+                    </button>
+                    <span style="font-size:12px;opacity:.5;margin-left:8px;">
+                        Requêtes SELECT interdites ici → utiliser l'outil <a href="{{ path('app_search') }}" style="color:#63b3ed;">Recherche</a>
+                    </span>
+                </div>
+            </form>
+        </div>
+
+        {# LISTE DES TABLES #}
+        <div class="card">
+            <div class="card-title">Tables disponibles</div>
+
+            {% if tables|length == 0 %}
+                <p class="empty-state">Aucune table trouvée dans la base de données.</p>
+            {% else %}
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                {% for t in tables %}
+                    <div style="display:flex;gap:4px;">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="insertTemplate('insert', '{{ t }}')">
+                            + {{ t }}
+                        </button>
+                        <button type="button" class="btn btn-sm"
+                                style="background:#2d3748;color:#a0aec0;"
+                                onclick="insertTemplate('update', '{{ t }}')">
+                            ~ {{ t }}
+                        </button>
+                        <a href="{{ path('app_database_preview', {table: t}) }}"
+                           class="btn btn-sm" style="background:#1a365d;color:#90cdf4;"
+                           title="Aperçu de la table">
+                            👁 {{ t }}
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        {# AIDE RAPIDE #}
+        <div class="card">
+            <div class="card-title">Aide — Syntaxe SQL rapide</div>
+            <table class="table">
+                <thead><tr><th>Opération</th><th>Exemple</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Insérer</td>
+                        <td><code>INSERT INTO table (col1, col2) VALUES ('val1', 'val2');</code></td>
+                    </tr>
+                    <tr>
+                        <td>Mettre à jour</td>
+                        <td><code>UPDATE table SET col1 = 'valeur' WHERE id = 1;</code></td>
+                    </tr>
+                    <tr>
+                        <td>Supprimer</td>
+                        <td><code>DELETE FROM table WHERE id = 1;</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<style>
+    code { font-family: 'Courier New', monospace; font-size: 12px; background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 4px; }
+    .btn-primary { background: #4299e1; color: #fff; }
+    .btn-primary:hover { background: #3182ce; }
+</style>
+
+<script>
+function insertTemplate(type, table) {
+    const ta = document.getElementById('sql_query');
+    if (type === 'insert') {
+        ta.value = `INSERT INTO \`${table}\` (colonne1, colonne2) VALUES ('valeur1', 'valeur2');`;
+    } else if (type === 'update') {
+        ta.value = `UPDATE \`${table}\` SET colonne1 = 'nouvelle_valeur' WHERE id = 1;`;
+    } else {
+        ta.value = `DELETE FROM \`${table}\` WHERE id = 1;`;
+    }
+    ta.focus();
+}
+</script>
+{% endblock %}

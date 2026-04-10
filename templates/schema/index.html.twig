@@ -1,0 +1,289 @@
+{# templates/schema/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Schéma de la base — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_schema') }}" class="active">🗂 Schéma BDD</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content" style="padding:20px;overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 56px);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-shrink:0;">
+            <h1 style="font-size:20px;font-weight:700;">🗂 Schéma de la base de données</h1>
+            <div style="display:flex;gap:8px;font-size:12px;opacity:.6;">
+                <span>{{ tables|length }} tables</span>
+                <span>·</span>
+                <span>{{ relations|length }} relations</span>
+            </div>
+        </div>
+
+        {# Toolbar #}
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;flex-shrink:0;">
+            <button onclick="zoom(1.15)" class="btn btn-secondary btn-sm">+ Zoom</button>
+            <button onclick="zoom(0.87)"  class="btn btn-secondary btn-sm">- Zoom</button>
+            <button onclick="resetView()" class="btn btn-secondary btn-sm">Réinitialiser</button>
+            <button onclick="toggleRel()" class="btn btn-secondary btn-sm">Relations : <span id="relTxt">ON</span></button>
+            <button onclick="autoLayout()" class="btn btn-secondary btn-sm">Auto-disposition</button>
+            <span style="font-size:12px;opacity:.5;margin-left:4px;line-height:28px;">Glisser les tables · Molette = zoom</span>
+        </div>
+
+        {# Légende #}
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;flex-shrink:0;">
+            <span style="display:flex;align-items:center;gap:5px;opacity:.7;">
+                <span style="display:inline-block;width:10px;height:10px;background:#854F0B;border-radius:2px;"></span>PK
+            </span>
+            <span style="display:flex;align-items:center;gap:5px;opacity:.7;">
+                <span style="display:inline-block;width:10px;height:10px;background:#185FA5;border-radius:2px;"></span>FK
+            </span>
+            <span style="font-size:12px;opacity:.5;">— relation (flèche vers table cible)</span>
+        </div>
+
+        {# Canvas #}
+        <div id="wrap" style="flex:1;border:0.5px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;position:relative;background:#0f1117;">
+            <canvas id="cvs" style="display:block;cursor:grab;"></canvas>
+        </div>
+
+        {# Tooltip #}
+        <div id="tooltip" style="display:none;position:absolute;background:#1e2330;border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:8px 12px;font-size:12px;color:#e2e8f0;pointer-events:none;z-index:100;max-width:260px;"></div>
+    </main>
+</div>
+
+{# Données JSON pour le JS #}
+<script>
+const TABLES_DATA    = {{ tables|json_encode|raw }};
+const RELATIONS_DATA = {{ relations|json_encode|raw }};
+</script>
+
+<script>
+const wrap  = document.getElementById('wrap');
+const cvs   = document.getElementById('cvs');
+const ctx   = cvs.getContext('2d');
+const tip   = document.getElementById('tooltip');
+
+let scale = 1, offX = 30, offY = 30;
+let draggingT = null, dragOX = 0, dragOY = 0;
+let panStart  = null;
+let showRel   = true;
+let hoveredT  = null;
+
+const ROW_H = 20, HDR_H = 28, PAD = 10, TW = 220;
+const COLS = {
+    pk:   '#EF9F27',
+    fk:   '#85B7EB',
+    norm: '#c2c0b6',
+    hdrBg:'#1a2744',
+    hdrT: '#90cdf4',
+    body: '#1e2330',
+    bord: '#2d4a7a',
+    rel:  'rgba(99,179,237,0.5)',
+    relH: 'rgba(252,211,77,0.85)',
+};
+
+// Positions initiales en grille
+const COLS_PER_ROW = 4;
+const GX = 260, GY = 240;
+const tblState = TABLES_DATA.map((t, i) => ({
+    ...t,
+    x: 20 + (i % COLS_PER_ROW) * GX,
+    y: 20 + Math.floor(i / COLS_PER_ROW) * GY,
+}));
+
+function tblHeight(t){ return HDR_H + t.fields.length * ROW_H + 4; }
+
+function resize(){
+    cvs.width  = wrap.clientWidth;
+    cvs.height = wrap.clientHeight;
+    render();
+}
+
+function fieldY(tblName, fieldName){
+    const t = tblState.find(t => t.name === tblName);
+    if(!t) return null;
+    const idx = t.fields.findIndex(f => f.name === fieldName);
+    if(idx < 0) return null;
+    return t.y + HDR_H + idx * ROW_H + ROW_H / 2;
+}
+
+function drawTable(t, highlighted){
+    const h = tblHeight(t);
+    const {x, y} = t;
+    ctx.save();
+    ctx.fillStyle = highlighted ? '#243150' : COLS.body;
+    ctx.strokeStyle = highlighted ? '#63b3ed' : COLS.bord;
+    ctx.lineWidth = highlighted ? 1.5 : 0.8;
+    ctx.beginPath(); ctx.roundRect(x, y, TW, h, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = highlighted ? '#1e3a5f' : COLS.hdrBg;
+    ctx.beginPath(); ctx.roundRect(x, y, TW, HDR_H, [5,5,0,0]); ctx.fill();
+    ctx.fillStyle = COLS.hdrT;
+    ctx.font = '500 12px monospace';
+    ctx.fillText(t.name, x + PAD, y + 18, TW - PAD * 2);
+
+    t.fields.forEach((f, i) => {
+        const fy = y + HDR_H + i * ROW_H;
+        if(i % 2 === 0){ ctx.fillStyle = 'rgba(255,255,255,0.025)'; ctx.fillRect(x+1, fy, TW-2, ROW_H); }
+        let tag = '', tagColor = '';
+        if(f.pk){ tag='PK'; tagColor=COLS.pk; }
+        else if(f.fk){ tag='FK'; tagColor=COLS.fk; }
+        if(tag){
+            ctx.fillStyle = tagColor;
+            ctx.font = 'bold 8px sans-serif';
+            ctx.fillText(tag, x + PAD, fy + 14);
+        }
+        ctx.fillStyle = f.pk ? COLS.pk : (f.fk ? COLS.fk : COLS.norm);
+        ctx.font = '11px monospace';
+        ctx.fillText(f.name, x + PAD + (tag ? 24 : 0), fy + 14, TW - PAD - (tag ? 24 : 0));
+        if(f.type){
+            ctx.fillStyle = 'rgba(160,174,192,0.45)';
+            ctx.font = '10px monospace';
+            const tw2 = ctx.measureText(f.type).width;
+            ctx.fillText(f.type, x + TW - PAD - tw2, fy + 14);
+        }
+    });
+    ctx.restore();
+}
+
+function drawRelation(r, highlighted){
+    const y1 = fieldY(r.from_table, r.from_field);
+    const y2 = fieldY(r.to_table,   r.to_field);
+    if(y1 === null || y2 === null) return;
+    const tF = tblState.find(t => t.name === r.from_table);
+    const tT = tblState.find(t => t.name === r.to_table);
+    if(!tF || !tT) return;
+    let x1, x2;
+    if(tF.x > tT.x + TW){ x1 = tF.x; x2 = tT.x + TW; }
+    else if(tT.x > tF.x + TW){ x1 = tF.x + TW; x2 = tT.x; }
+    else if(tF.x >= tT.x){ x1 = tF.x; x2 = tT.x; }
+    else { x1 = tF.x + TW; x2 = tT.x + TW; }
+    const mx = (x1 + x2) / 2;
+    ctx.save();
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = highlighted ? COLS.relH : COLS.rel;
+    ctx.lineWidth   = highlighted ? 1.5 : 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const dir = x2 > x1 ? 1 : -1;
+    ctx.fillStyle = highlighted ? COLS.relH : COLS.rel;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - dir*7, y2 - 4);
+    ctx.lineTo(x2 - dir*7, y2 + 4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+}
+
+function render(){
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.save();
+    ctx.translate(offX, offY);
+    ctx.scale(scale, scale);
+    const hRels = hoveredT ? RELATIONS_DATA.filter(r => r.from_table===hoveredT.name || r.to_table===hoveredT.name) : [];
+    if(showRel){
+        RELATIONS_DATA.forEach(r => { if(!hRels.includes(r)) drawRelation(r, false); });
+        hRels.forEach(r => drawRelation(r, true));
+    }
+    tblState.forEach(t => drawTable(t, t === hoveredT));
+    ctx.restore();
+}
+
+function zoom(f){
+    scale = Math.min(3, Math.max(0.2, scale * f));
+    render();
+}
+function resetView(){ scale=1; offX=30; offY=30; render(); }
+function toggleRel(){ showRel=!showRel; document.getElementById('relTxt').textContent=showRel?'ON':'OFF'; render(); }
+function autoLayout(){
+    tblState.forEach((t,i)=>{ t.x=20+(i%COLS_PER_ROW)*GX; t.y=20+Math.floor(i/COLS_PER_ROW)*GY; });
+    resetView();
+}
+
+function canvasXY(e){
+    const r = cvs.getBoundingClientRect();
+    return { x:(e.clientX-r.left-offX)/scale, y:(e.clientY-r.top-offY)/scale };
+}
+function tableAt(x,y){
+    for(let i=tblState.length-1;i>=0;i--){
+        const t=tblState[i];
+        if(x>=t.x&&x<=t.x+TW&&y>=t.y&&y<=t.y+tblHeight(t)) return t;
+    }
+    return null;
+}
+function fieldAt(t, x, y){
+    const ly = y - t.y - HDR_H;
+    if(ly < 0) return null;
+    const idx = Math.floor(ly / ROW_H);
+    return t.fields[idx] ?? null;
+}
+
+cvs.addEventListener('mousedown', e=>{
+    const {x,y} = canvasXY(e);
+    const t = tableAt(x,y);
+    if(t){ draggingT=t; dragOX=x-t.x; dragOY=y-t.y; cvs.style.cursor='grabbing'; }
+    else { panStart={x:e.clientX-offX,y:e.clientY-offY}; cvs.style.cursor='grabbing'; }
+});
+cvs.addEventListener('mousemove', e=>{
+    if(draggingT){
+        const {x,y}=canvasXY(e);
+        draggingT.x=x-dragOX; draggingT.y=y-dragOY;
+        tip.style.display='none';
+        render(); return;
+    }
+    if(panStart){ offX=e.clientX-panStart.x; offY=e.clientY-panStart.y; render(); return; }
+    const {x,y}=canvasXY(e);
+    const t=tableAt(x,y);
+    hoveredT = t;
+    if(t){
+        const f=fieldAt(t,x,y);
+        if(f && y > t.y+HDR_H){
+            let html = `<strong>${f.name}</strong> <em style="opacity:.6">${f.type||''}</em>`;
+            if(f.pk) html += ` <span style="color:${COLS.pk};">· Clé primaire</span>`;
+            if(f.fk) html += ` <span style="color:${COLS.fk};">· FK → ${f.fk.table}.${f.fk.column}</span>`;
+            if(!f.null&&!f.pk) html += ` <span style="opacity:.5;">· NOT NULL</span>`;
+            tip.innerHTML = html;
+            tip.style.display='block';
+            const wr = wrap.getBoundingClientRect();
+            tip.style.left=(e.clientX-wr.left+12)+'px';
+            tip.style.top =(e.clientY-wr.top-10)+'px';
+        } else { tip.style.display='none'; }
+        cvs.style.cursor='move';
+    } else { hoveredT=null; tip.style.display='none'; cvs.style.cursor='grab'; }
+    render();
+});
+cvs.addEventListener('mouseup',()=>{ draggingT=null; panStart=null; cvs.style.cursor='grab'; });
+cvs.addEventListener('mouseleave',()=>{ draggingT=null; panStart=null; tip.style.display='none'; });
+cvs.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const f=e.deltaY<0?1.1:0.91;
+    const r=cvs.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    offX=mx-(mx-offX)*f; offY=my-(my-offY)*f;
+    scale=Math.min(3,Math.max(0.2,scale*f));
+    render();
+},{passive:false});
+
+const ro = new ResizeObserver(resize);
+ro.observe(wrap);
+resize();
+</script>
+{% endblock %}

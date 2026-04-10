@@ -1,0 +1,47 @@
+{# templates/approbation/token_resultat.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Résultat du vote — Comité Maoré{% endblock %}
+{% block body_theme %}default{% endblock %}
+
+{% block body %}
+<style>
+  body.theme-default{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(160deg,#14532d,#166534);}
+  .box{background:#fff;border-radius:14px;padding:40px;max-width:480px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);text-align:center;}
+  .icon{font-size:56px;margin-bottom:16px;}
+  h2{font-size:20px;margin-bottom:12px;}
+  .msg{font-size:15px;color:#4a5568;margin-bottom:24px;}
+  .btn{display:inline-block;padding:10px 24px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;background:#166534;color:#fff;}
+</style>
+
+<div class="box">
+  {% if succes %}
+    <div class="icon">{% if decision == 'approuve' %}✅{% else %}❌{% endif %}</div>
+    <h2 style="color:{{ decision == 'approuve' ? '#276749' : '#c53030' }};">
+      {{ decision == 'approuve' ? 'Approbation enregistrée' : 'Rejet enregistré' }}
+    </h2>
+    <p class="msg">{{ message }}</p>
+    {% if approbation %}
+      <p style="font-size:13px;color:#718096;">
+        Demande #{{ approbation.id_approbation }} —
+        {% if approbation.statut == 'approuve' %}
+          <strong style="color:#276749;">L'opération a été exécutée.</strong>
+        {% elseif approbation.statut == 'rejete' %}
+          <strong style="color:#c53030;">La demande a été rejetée.</strong>
+        {% else %}
+          En attente des autres validations.
+        {% endif %}
+      </p>
+    {% endif %}
+  {% else %}
+    <div class="icon">⚠️</div>
+    <h2 style="color:#c53030;">Token invalide</h2>
+    <p class="msg">{{ message }}</p>
+    <p style="font-size:13px;color:#718096;">
+      Si vous pensez qu'il s'agit d'une erreur, connectez-vous à l'application
+      et utilisez le code de secours sur la page de la demande.
+    </p>
+  {% endif %}
+
+  <a href="/" class="btn" style="margin-top:8px;">Retour à l'accueil</a>
+</div>
+{% endblock %}

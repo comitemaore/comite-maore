@@ -1,0 +1,160 @@
+{# templates/admin_section/list.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Administrateurs par section — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_admin_section_list') }}" class="active">🔑 Admins sections</a>
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <h1 style="font-size:22px;font-weight:700;">🔑 Administrateurs par section</h1>
+            <a href="{{ path('app_admin_section_new') }}" class="btn btn-success">+ Ajouter un admin</a>
+        </div>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Maximum 3 administrateurs par section — utilisés pour le workflow d'approbation.
+            {{ total }} admin(s) enregistré(s).
+        </p>
+
+        {% for msg in app.flashes('success') %}<div class="alert alert-success">{{ msg }}</div>{% endfor %}
+        {% for msg in app.flashes('danger') %}<div class="alert alert-danger">{{ msg }}</div>{% endfor %}
+
+        {% if grouped is empty %}
+            <div class="card" style="text-align:center;padding:48px;">
+                <div style="font-size:40px;margin-bottom:12px;">🔑</div>
+                <div style="font-size:15px;font-weight:500;margin-bottom:8px;">Aucun administrateur configuré</div>
+                <div style="font-size:13px;opacity:.5;margin-bottom:16px;">
+                    Commencez par ajouter des administrateurs pour chaque section.
+                </div>
+                <a href="{{ path('app_admin_section_new') }}" class="btn btn-success">+ Ajouter un admin</a>
+            </div>
+        {% else %}
+            {# Alerte sections sans 3 admins #}
+            {% for idSec, grp in grouped %}
+                {% if grp.admins|length < 3 %}
+                    <div class="alert" style="background:#2d1a00;color:#fbd38d;border:1px solid #d69e2e;margin-bottom:8px;">
+                        ⚠ Section <strong>{{ grp.nom }}</strong> :
+                        {{ grp.admins|length }}/3 administrateurs configurés.
+                        Le workflow d'approbation nécessite 3 admins par section.
+                    </div>
+                {% endif %}
+            {% endfor %}
+
+            {% for idSec, grp in grouped %}
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>📍 {{ grp.nom ?? 'Section #' ~ idSec }}</span>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <span style="font-size:12px;opacity:.5;">{{ grp.admins|length }}/3 admins</span>
+                        <div style="display:flex;gap:3px;">
+                            {% for i in 1..3 %}
+                                <span style="width:12px;height:12px;border-radius:50%;
+                                    background:{{ i <= grp.admins|length ? '#38a169' : 'rgba(255,255,255,.15)' }};
+                                    display:inline-block;"></span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Rang</th><th>Login</th><th>Nom</th>
+                            <th>Email</th><th>Statut</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for adm in grp.admins %}
+                        <tr style="{{ adm.actif ? '' : 'opacity:.45;' }}">
+                            <td>
+                                <span style="display:inline-flex;width:24px;height:24px;border-radius:50%;
+                                    align-items:center;justify-content:center;font-size:12px;font-weight:600;
+                                    background:{{ adm.rang == 1 ? '#2b6cb0' : (adm.rang == 2 ? '#276749' : '#744210') }};
+                                    color:#fff;">
+                                    {{ adm.rang }}
+                                </span>
+                            </td>
+                            <td><code style="font-size:12px;background:rgba(255,255,255,.08);padding:2px 6px;border-radius:4px;">{{ adm.login_admin }}</code></td>
+                            <td><strong>{{ adm.prenom_admin }} {{ adm.nom_admin }}</strong></td>
+                            <td style="font-size:12px;opacity:.7;">{{ adm.email_admin ?? '—' }}</td>
+                            <td>
+                                {% if adm.actif %}
+                                    <span class="badge" style="background:#276749;color:#9ae6b4;">Actif</span>
+                                {% else %}
+                                    <span class="badge" style="background:#742a2a;color:#fc8181;">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td style="display:flex;gap:5px;">
+                                <a href="{{ path('app_admin_section_edit', {id: adm.id_admin}) }}"
+                                   class="btn btn-secondary btn-sm">✏️</a>
+                                <form method="post"
+                                      action="{{ path('app_admin_section_toggle', {id: adm.id_admin}) }}">
+                                    <input type="hidden" name="_token"
+                                           value="{{ csrf_token('toggle_admin_' ~ adm.id_admin) }}">
+                                    <button type="submit" class="btn btn-sm"
+                                            style="background:{{ adm.actif ? '#744210' : '#276749' }};color:#fff;">
+                                        {{ adm.actif ? '⏸' : '▶' }}
+                                    </button>
+                                </form>
+                                <form method="post"
+                                      action="{{ path('app_admin_section_delete', {id: adm.id_admin}) }}"
+                                      onsubmit="return confirm('Supprimer cet administrateur ?');">
+                                    <input type="hidden" name="_token"
+                                           value="{{ csrf_token('del_admin_' ~ adm.id_admin) }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        {# Règles du workflow #}
+        <div class="card" style="margin-top:8px;">
+            <div class="card-title">ℹ Règles du workflow d'approbation</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;font-size:13px;">
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:3px;">Vote 1 — Initiateur</div>
+                    <div style="opacity:.6;">Admin rang 1 de la section concernée (vote auto)</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:3px;">Vote 2 — Même section</div>
+                    <div style="opacity:.6;">Admin rang 2 ou 3 de la même section</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:3px;">Vote 3 — Autre section</div>
+                    <div style="opacity:.6;">N'importe quel admin d'une autre section</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:3px;">Vote 4 — Autre section</div>
+                    <div style="opacity:.6;">Un second admin d'une section différente</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+<style>.btn-primary{background:#4299e1;color:#fff;}.btn-primary:hover{background:#3182ce;}</style>
+{% endblock %}

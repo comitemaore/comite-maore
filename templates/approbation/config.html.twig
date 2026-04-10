@@ -1,0 +1,131 @@
+{# templates/approbation/config.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Configuration approbations — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_approbation_list') }}" class="btn btn-secondary btn-sm">← Approbations</a>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_approbation_config') }}" class="active">⚙️ Config tokens</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">⚙️ Configuration des tokens d'approbation</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Durée de validité des tokens envoyés par mail. Maximum 12h et plafonné à 23h59 du jour d'envoi.
+        </p>
+
+        {% for msg in app.flashes('success') %}<div class="alert alert-success">{{ msg }}</div>{% endfor %}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+            <div class="card">
+                <div class="card-title">Durée de validité & expéditeur</div>
+                <form method="post">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                        <div class="form-group">
+                            <label>Heures (1–12)</label>
+                            <input type="number" name="duree_heures" class="form-control"
+                                   min="1" max="12" value="{{ config.duree_heures }}">
+                        </div>
+                        <div class="form-group">
+                            <label>Minutes (0–59)</label>
+                            <input type="number" name="duree_minutes" class="form-control"
+                                   min="0" max="59" value="{{ config.duree_minutes }}"
+                                   id="minutes-input">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Email expéditeur</label>
+                        <input type="email" name="email_expediteur" class="form-control"
+                               value="{{ config.email_expediteur }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Nom expéditeur</label>
+                        <input type="text" name="nom_expediteur" class="form-control"
+                               value="{{ config.nom_expediteur }}">
+                    </div>
+
+                    <button type="submit" class="btn btn-success">💾 Enregistrer</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Aperçu de l'expiration</div>
+                <p style="font-size:13px;opacity:.6;margin-bottom:12px;">
+                    Si un token est envoyé maintenant, il expirera le :
+                </p>
+                <div style="font-size:22px;font-weight:700;color:#90cdf4;margin-bottom:8px;">
+                    {{ expiration|date('d/m/Y à H\\hi') }}
+                </div>
+                <p style="font-size:12px;opacity:.5;">
+                    (plafonné à 23h59 si la durée dépasse minuit)
+                </p>
+
+                <hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:16px 0;">
+
+                <div class="card-title" style="font-size:14px;">Workflow des 3 admins</div>
+                <div style="font-size:13px;opacity:.7;line-height:2;">
+                    1. <strong>Initiateur</strong> — administrateur1 de la section concernée<br>
+                    2. <strong>Autre section</strong> — administrateur1 d'une autre section<br>
+                    3. <strong>Bureau national</strong> — administrateur1 du BEN<br>
+                    <span style="opacity:.5;font-size:12px;">
+                        Un rejet unique suffit à annuler la demande.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {# Vérification des emails configurés #}
+        <div class="card" style="margin-top:16px;">
+            <div class="card-title">Vérification des emails des administrateurs</div>
+            <p style="font-size:13px;opacity:.6;margin-bottom:12px;">
+                Les tokens sont envoyés aux emails de ces adhérents (champs <code>email_adht</code>).
+            </p>
+            <table class="table">
+                <thead>
+                    <tr><th>Rôle</th><th>Source</th><th>Colonne</th><th>Statut email</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Initiateur</td>
+                        <td>comitemaore_sections</td>
+                        <td><code>administrateur1</code></td>
+                        <td><span style="opacity:.5;font-size:12px;">Vérifié lors de l'envoi</span></td>
+                    </tr>
+                    <tr>
+                        <td>Autre section</td>
+                        <td>comitemaore_sections (autre)</td>
+                        <td><code>administrateur1</code></td>
+                        <td><span style="opacity:.5;font-size:12px;">Vérifié lors de l'envoi</span></td>
+                    </tr>
+                    <tr>
+                        <td>Bureau national</td>
+                        <td>comitemaore_burexecnat</td>
+                        <td><code>administrateur1</code></td>
+                        <td><span style="opacity:.5;font-size:12px;">Vérifié lors de l'envoi</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+<style>.btn-primary{background:#4299e1;color:#fff;} code{font-family:'Courier New',monospace;font-size:12px;background:rgba(255,255,255,.08);padding:2px 5px;border-radius:3px;}</style>
+{% endblock %}

@@ -1,0 +1,119 @@
+{# templates/approbation/show.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Approbation #{{ approbation.id_approbation }}{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+{% block navbar %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+  <div class="navbar-right">
+    <a href="{{ path('app_approbation_list') }}" class="btn btn-secondary btn-sm">← Liste</a>
+    <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+    <a href="{{ path('app_approbation_list') }}" class="active">✅ Approbations</a>
+    {% if is_admin %}<a href="{{ path('app_log_list') }}">📋 Logs</a>{% endif %}
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+  <main class="main-content">
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
+      ✅ Demande d'approbation #{{ approbation.id_approbation }}
+    </h1>
+
+    {# STATUT #}
+    <div class="card">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <span class="badge" style="padding:6px 14px;font-size:13px;background:{% if approbation.statut == 'approuve' %}#38a169{% elseif approbation.statut == 'rejete' %}#e53e3e{% else %}#d69e2e{% endif %};color:#fff;">
+          {{ approbation.statut|upper }}
+        </span>
+        <span style="font-size:14px;">Opération : <strong>{{ approbation.type_operation }}</strong></span>
+        <span style="font-size:14px;">Adhérent cible : <strong>{{ approbation.prenom_adht ?? '?' }} {{ approbation.nom_adht ?? '' }}</strong></span>
+        <span style="font-size:13px;opacity:.6;">Initiateur : {{ approbation.init_prenom }} {{ approbation.init_nom }}</span>
+        <span style="font-size:13px;opacity:.6;">Expire : {{ approbation.date_expiration }}</span>
+      </div>
+
+      {# Progression votes #}
+      {% set requis = ['initiateur','meme_section','autre_section_1','autre_section_2'] %}
+      {% set rolesVotes = votes|map(v => v.role_vote) %}
+      <div style="margin-top:16px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Progression ({{ nb_approuve }}/4 approbations)</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          {% for role in requis %}
+            {% set voted = role in rolesVotes %}
+            <div style="padding:8px 14px;border-radius:6px;font-size:12px;
+                        background:{{ voted ? '#276749' : 'rgba(255,255,255,.06)' }};
+                        border:1px solid {{ voted ? '#38a169' : 'rgba(255,255,255,.15)' }};">
+              {{ voted ? '✓' : '○' }}
+              {{ {initiateur:'Initiateur (même section)', meme_section:'Admin même section', autre_section_1:'Admin autre section 1', autre_section_2:'Admin autre section 2'}[role] }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Données de l'opération #}
+    <div class="card">
+      <div class="card-title">Données de l'opération</div>
+      <table class="table">
+        <tbody>
+          {% for key, val in data %}
+          <tr><td style="width:35%;font-weight:500;">{{ key }}</td><td>{{ val ?? '—' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Votes déjà enregistrés #}
+    {% if votes|length > 0 %}
+    <div class="card">
+      <div class="card-title">Votes enregistrés</div>
+      <table class="table">
+        <thead><tr><th>Admin</th><th>Section</th><th>Rôle</th><th>Décision</th><th>Commentaire</th><th>Date</th></tr></thead>
+        <tbody>
+          {% for v in votes %}
+          <tr>
+            <td>{{ v.prenom_adht }} {{ v.nom_adht }}</td>
+            <td>{{ v.id_section ?? '—' }}</td>
+            <td>{{ v.role_vote }}</td>
+            <td>
+              <span class="badge" style="background:{{ v.decision == 'approuve' ? '#38a169' : '#e53e3e' }};color:#fff;">
+                {{ v.decision }}
+              </span>
+            </td>
+            <td>{{ v.commentaire ?? '—' }}</td>
+            <td style="font-size:12px;">{{ v.date_vote }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {# Formulaire de vote #}
+    {% if is_admin and not deja_vote and approbation.statut == 'en_attente' %}
+    <div class="card">
+      <div class="card-title">Votre vote</div>
+      <form method="post" action="{{ path('app_approbation_voter', {id: approbation.id_approbation}) }}">
+        <div class="form-group">
+          <label>Commentaire (optionnel)</label>
+          <textarea name="commentaire" class="form-control" rows="2"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button type="submit" name="decision" value="approuve" class="btn btn-success">✓ Approuver</button>
+          <button type="submit" name="decision" value="rejete"   class="btn btn-danger"
+                  onclick="return confirm('Confirmer le rejet ?');">✗ Rejeter</button>
+        </div>
+      </form>
+    </div>
+    {% elseif deja_vote %}
+      <div class="alert alert-success">Vous avez déjà voté pour cette demande.</div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

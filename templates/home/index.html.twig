@@ -1,0 +1,104 @@
+{# templates/home/index.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Connexion — Comité Maore{% endblock %}
+{% block body_theme %}default{% endblock %}
+
+{% block body %}
+<style>
+    body.theme-default {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: flex-start; padding: 0;
+        background: linear-gradient(160deg, #14532d 0%, #166534 50%, #15803d 100%);
+    }
+    .hero-header {
+        text-align: center; color: #fff; padding: 48px 24px 32px;
+        width: 100%;
+        background: rgba(0,0,0,.15);
+        border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    .hero-header h1 {
+        font-size: 28px; font-weight: 700; letter-spacing: .04em;
+        text-transform: uppercase; margin-bottom: 10px;
+        text-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+    .hero-header h2 {
+        font-size: 17px; font-weight: 400; color: #bbf7d0;
+        text-shadow: 0 1px 4px rgba(0,0,0,.2);
+    }
+    .login-box {
+        background: rgba(255,255,255,.97);
+        border-radius: 14px; padding: 36px 40px;
+        width: 100%; max-width: 420px;
+        margin: 40px auto;
+        box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    .login-box h3 {
+        font-size: 20px; font-weight: 600; color: #166534;
+        margin-bottom: 24px; text-align: center;
+    }
+    .login-box label { color: #374151; }
+    .login-box .form-control {
+        background: #f9fafb; color: #111827;
+        border: 1px solid #d1fae5;
+    }
+    .login-box .form-control:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
+    .btn-login {
+        width: 100%; padding: 11px; font-size: 15px; font-weight: 600;
+        background: #16a34a; color: #fff; border: none;
+        border-radius: 8px; cursor: pointer; transition: background .2s;
+    }
+    .btn-login:hover { background: #15803d; }
+    .divider { border: none; border-top: 1px solid #d1fae5; margin: 20px 0; }
+    .footer-note { text-align: center; font-size: 12px; color: rgba(255,255,255,.55); padding-bottom: 32px; }
+</style>
+
+<div class="hero-header">
+<!-- 🌿 -->
+    <h1> Base de données du Comité Maore</h1>
+    <h2>Bienvenue dans la base de données du Comité Maore</h2>
+</div>
+
+<div class="login-box">
+    <h3>Connexion</h3>
+
+    {% if error %}
+        <div class="alert alert-danger">
+            {{ error.messageKey|trans(error.messageData, 'security') }}
+        </div>
+    {% endif %}
+
+    <form method="post" action="{{ path('app_home') }}">
+        <div class="form-group">
+            <label for="username">Identifiant</label>
+            <input id="username" type="text" name="_username" class="form-control"
+                   value="{{ last_username }}" autocomplete="username" autofocus
+                   placeholder="Entrez votre identifiant">
+        </div>
+
+        <div class="form-group">
+            <label for="password">Mot de passe</label>
+            <input id="password" type="password" name="_password" class="form-control"
+                   autocomplete="current-password" placeholder="Entrez votre mot de passe">
+        </div>
+
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="remember_me" name="_remember_me">
+            <label for="remember_me" style="margin:0;font-size:13px;cursor:pointer;">
+                Se souvenir de moi
+            </label>
+        </div>
+
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+        <button class="btn-login" type="submit">Se connecter</button>
+    </form>
+
+    <hr class="divider">
+    <p style="text-align:center;font-size:12px;color:#6b7280;">
+        Accès réservé au personnel autorisé du Comité Maore.
+    </p>
+</div>
+
+<p class="footer-note">Comité Maore © {{ "now"|date("Y") }} — Système de gestion de base de données</p>
+{% endblock %}

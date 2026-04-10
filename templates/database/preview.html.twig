@@ -1,0 +1,54 @@
+{# templates/database/preview.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Aperçu : {{ table }} — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <a href="{{ path('app_database') }}" class="btn btn-secondary btn-sm">← Retour</a>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<main class="main-content" style="max-width:100%;">
+    <h1 style="font-size:20px;font-weight:700;margin-bottom:20px;">
+        👁 Aperçu de la table <code style="font-size:18px;">{{ table }}</code>
+        <span style="font-size:13px;font-weight:400;opacity:.5;">(20 premières lignes)</span>
+    </h1>
+
+    {% if rows|length == 0 %}
+        <div class="card">
+            <p class="empty-state">La table est vide.</p>
+        </div>
+    {% else %}
+    <div class="card" style="padding:0;overflow:hidden;">
+        <div style="overflow-x:auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        {% for col in columns %}
+                            <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        {% for cell in row %}
+                            <td>{{ cell is null ? '—' : cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</main>
+{% endblock %}

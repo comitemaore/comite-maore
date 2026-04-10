@@ -1,0 +1,152 @@
+{# templates/finance/operation.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Opération financière — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+{% block navbar %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+  <div class="navbar-right">
+    <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}" class="btn btn-secondary btn-sm">← Historique</a>
+    <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <!-- 📊 -->
+    <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+    <!-- 👥 -->
+    <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}" class="active">💰 Finances</a>
+    {% if is_admin %}
+    <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+    <a href="{{ path('app_log_list') }}">📋 Logs</a>
+    {% endif %}
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+  <main class="main-content">
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">💰 Opération financière</h1>
+    <p style="font-size:13px;opacity:.6;margin-bottom:20px;">
+      Adhérent : <strong>{{ adherent.prenom_adht }} {{ adherent.nom_adht }}</strong>
+    </p>
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+    <form method="post" id="finForm">
+      <div class="card">
+        <div class="card-title">Type d'opération</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+          {% for op, label in {
+            renouvellement_carte: '🔄 Renouvellement carte',
+            ristourne:            '💼 Ristourne professionnelle',
+            cotisation:           '💳 Cotisation',
+            cotisation_due:       '⚠ Payer cotisation due',
+            don:                  '🎁 Don',
+            note:                 '📝 Note'
+          } %}
+          <label style="display:flex;align-items:center;gap:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);cursor:pointer;">
+            <input type="radio" name="type_operation" value="{{ op }}" required
+                   onchange="showFields(this.value)"> {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Champs communs #}
+      <div class="card" id="fieldsCommon" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" id="grpMontant">
+            <label>Montant (€)</label>
+            <input type="number" name="montant" class="form-control" min="0" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Date opération</label>
+            <input type="date" name="date_operation" class="form-control"
+                   value="{{ "now"|date("Y-m-d") }}">
+          </div>
+
+          {# Renouvellement carte #}
+          <div class="form-group" id="grpRenouv" style="display:none;">
+            <label>Date de renouvellement</label>
+            <input type="date" name="date_renouvellement" class="form-control">
+          </div>
+
+          {# Cotisation - année #}
+          <div class="form-group" id="grpAnneeCotis" style="display:none;">
+            <label>Année de cotisation</label>
+            <input type="number" name="annee_cotisation" class="form-control"
+                   min="2000" max="2099" value="{{ annee_courante }}">
+          </div>
+
+          {# Cotisation due #}
+          <div class="form-group" id="grpCotisDue" style="display:none;">
+            <label>Cotisation due à régler</label>
+            <select name="id_cotis_due" class="form-control">
+              <option value="">-- Sélectionner --</option>
+              {% for cd in cotisations_dues %}
+                <option value="{{ cd.id_cotis_due }}">
+                  {{ cd.annee }} — {{ cd.solde_restant }}€ restant
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {# Don #}
+          <div class="form-group" id="grpDon" style="display:none;" style="grid-column:span 2;">
+            <label>Nature du don</label>
+            <input type="text" name="nature_don" class="form-control" placeholder="ex : matériel informatique, numéraire...">
+          </div>
+
+          {# Note #}
+          <div class="form-group" id="grpNote" style="grid-column:span 2;">
+            <label>Note</label>
+            <textarea name="note" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+
+        {# Répartition prévisionnelle - s'affiche pour cotisation #}
+        <div id="grpRepartition" style="display:none;margin-top:12px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Répartition automatique</div>
+          <div style="display:flex;gap:16px;font-size:13px;">
+            <span>🏛 Bureau National (50%) : <strong id="rBne">0,00 €</strong></span>
+            <span>🏘 Fédération (30%) : <strong id="rFed">0,00 €</strong></span>
+            <span>📍 Section (20%) : <strong id="rSect">0,00 €</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="btnSubmit" style="display:none;">
+        <button type="submit" class="btn btn-success">✓ Enregistrer l'opération</button>
+        <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}" class="btn btn-secondary">Annuler</a>
+      </div>
+    </form>
+  </main>
+</div>
+<style>
+  body.theme-dark .btn-primary{background:#4299e1;color:#fff;}
+  body.theme-sky  .btn-primary{background:#2b6cb0;color:#fff;}
+</style>
+<script>
+function fmt(v){ return v.toFixed(2).replace('.',',') + ' €'; }
+function showFields(type) {
+  document.getElementById('fieldsCommon').style.display = 'block';
+  document.getElementById('btnSubmit').style.display    = 'flex';
+  document.getElementById('btnSubmit').style.gap        = '10px';
+
+  const show = (id, v) => document.getElementById(id).style.display = v ? 'block' : 'none';
+  show('grpMontant',    !['note'].includes(type));
+  show('grpRenouv',     type === 'renouvellement_carte');
+  show('grpAnneeCotis', ['cotisation','cotisation_due'].includes(type));
+  show('grpCotisDue',   type === 'cotisation_due');
+  show('grpDon',        type === 'don');
+  show('grpRepartition',['cotisation','cotisation_due'].includes(type));
+}
+document.getElementById('finForm').addEventListener('input', () => {
+  const m = parseFloat(document.querySelector('[name=montant]')?.value) || 0;
+  document.getElementById('rBne').textContent  = fmt(m * 0.50);
+  document.getElementById('rFed').textContent  = fmt(m * 0.30);
+  document.getElementById('rSect').textContent = fmt(m * 0.20);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+{# templates/log/list.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Logs — Comité Maore{% endblock %}
+{% block body_theme %}dark{% endblock %}
+{% block navbar %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+  <!-- 🌿 -->
+  <div class="navbar-right">
+    <span class="badge badge-admin">ADMIN</span>
+    <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+    <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+    <a href="{{ path('app_log_list') }}" class="active">📋 Tous les logs</a>
+    <a href="{{ path('app_log_today') }}">📅 Logs du jour</a>
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+  <main class="main-content">
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:20px;">📋 Journal des activités</h1>
+
+    <div class="card" style="padding:16px;">
+      <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <select name="module" class="form-control" style="width:auto;">
+          <option value="">Tous les modules</option>
+          {% for m in modules %}
+            <option value="{{ m }}" {{ filModule == m ? 'selected' : '' }}>{{ m }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="action" class="form-control" style="flex:1;min-width:200px;"
+               placeholder="Filtrer par action..." value="{{ filAction }}">
+        <button type="submit" class="btn btn-primary">🔍 Filtrer</button>
+        <a href="{{ path('app_log_list') }}" class="btn btn-secondary">Reset</a>
+      </form>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      {% if logs|length == 0 %}
+        <p class="empty-state">Aucun log trouvé.</p>
+      {% else %}
+      <div style="overflow-x:auto;">
+        <table class="table">
+          <thead><tr>
+            <th>Date</th><th>Utilisateur</th><th>Module</th><th>Action</th>
+            <th>Cible</th><th>IP</th><th>Résultat</th>
+          </tr></thead>
+          <tbody>
+            {% for log in logs %}
+            <tr>
+              <td style="font-size:12px;white-space:nowrap;">{{ log.date_action }}</td>
+              <td style="font-size:12px;">{{ log.login_adht ?? 'anonymous' }}<br>
+                <span style="opacity:.5;">{{ log.prenom_adht ?? '' }} {{ log.nom_adht ?? '' }}</span>
+              </td>
+              <td><span class="badge" style="background:rgba(255,255,255,.1);color:inherit;">{{ log.module ?? '—' }}</span></td>
+              <td style="font-size:12px;">{{ log.action }}</td>
+              <td style="font-size:12px;">{{ log.id_cible ?? '—' }}</td>
+              <td style="font-size:12px;opacity:.6;">{{ log.ip_adresse ?? '—' }}</td>
+              <td>
+                <span class="badge" style="background:{% if log.resultat == 'succes' %}#276749{% elseif log.resultat == 'echec' %}#742a2a{% else %}#2a4365{% endif %};color:#fff;">
+                  {{ log.resultat }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </main>
+</div>
+<style>
+  .btn-primary { background:#4299e1;color:#fff; }
+  .btn-primary:hover { background:#3182ce; }
+</style>
+{% endblock %}

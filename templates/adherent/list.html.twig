@@ -1,0 +1,97 @@
+{# templates/adherent/list.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Adhérents — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>{% else %}<span class="badge badge-user">USER</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <a href="{{ path('app_adherent_list') }}" class="active">👥 Adhérents</a>
+    <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+    <a href="{{ path('app_search') }}">🔍 Recherche</a>
+    {% if is_admin %}
+    <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+    <a href="{{ path('app_log_list') }}">📋 Logs</a>
+    {% endif %}
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+
+  <main class="main-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h1 style="font-size:22px;font-weight:700;">👥 Adhérents</h1>
+      <a href="{{ path('app_adherent_new') }}" class="btn btn-success">+ Nouvel adhérent</a>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <form method="get" style="display:flex;gap:10px;">
+        <input type="text" name="q" value="{{ search }}" class="form-control" placeholder="Rechercher nom, prénom, email..." style="flex:1;">
+        <button type="submit" class="btn btn-primary">🔍 Chercher</button>
+        {% if search %}<a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">✕ Reset</a>{% endif %}
+      </form>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      {% if adherents|length == 0 %}
+        <p class="empty-state">Aucun adhérent trouvé.</p>
+      {% else %}
+      <table class="table">
+        <thead><tr>
+          <th>#</th><th>Civilité</th><th>Nom</th><th>Prénom</th>
+          <th>Section</th><th>Email</th><th>Cotisant</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% for adh in adherents %}
+          <tr>
+            <td>{{ adh.id_adht }}</td>
+            <td>{{ adh.civilite_adht }}</td>
+            <td><strong>{{ adh.nom_adht }}</strong></td>
+            <td>{{ adh.prenom_adht }}</td>
+            <td>{{ adh.id_section ?? '—' }}</td>
+            <td>{{ adh.email_adht ?? '—' }}</td>
+            <td>
+              {% if adh.cotis_adht == 'Oui' %}
+                <span class="badge" style="background:#38a169;color:#fff;">Oui</span>
+              {% else %}
+                <span class="badge" style="background:#e53e3e;color:#fff;">Non</span>
+              {% endif %}
+            </td>
+            <td style="display:flex;gap:5px;flex-wrap:wrap;">
+              <a href="{{ path('app_adherent_show', {id: adh.id_adht}) }}" class="btn btn-secondary btn-sm">👁</a>
+              <a href="{{ path('app_adherent_edit', {id: adh.id_adht}) }}" class="btn btn-primary btn-sm">✏️</a>
+              <a href="{{ path('app_finance_show', {idAdht: adh.id_adht}) }}" class="btn btn-sm" style="background:#d69e2e;color:#fff;">💰</a>
+              <a href="{{ path('app_document_list', {idAdht: adh.id_adht}) }}" class="btn btn-sm" style="background:#553c9a;color:#fff;">📁</a>
+              <a href="{{ path('app_cv_show', {idAdht: adh.id_adht}) }}" class="btn btn-sm" style="background:#2c7a7b;color:#fff;">📄</a>
+              <form method="post" action="{{ path('app_adherent_delete', {id: adh.id_adht}) }}"
+                    onsubmit="return confirm('Demander la suppression de {{ adh.prenom_adht }} {{ adh.nom_adht }} ?');"
+                    style="display:inline;">
+                <input type="hidden" name="_token" value="{{ csrf_token('delete_adherent_' ~ adh.id_adht) }}">
+                <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </main>
+</div>
+<style>
+  body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+  body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+</style>
+{% endblock %}

@@ -1,0 +1,150 @@
+{# templates/approbation/list.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Approbations — Comité Maoré{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}
+            <span class="badge badge-admin">ADMIN</span>
+        {% else %}
+            <span class="badge badge-user">USER</span>
+        {% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}" class="active">✅ Approbations</a>
+        <a href="{{ path('app_search') }}">🔍 Recherche</a>
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">✅ Demandes d'approbation</h1>
+                <p style="font-size:13px;opacity:.6;">Opérations en attente de validation par 3 administrateurs</p>
+            </div>
+            <span style="font-size:13px;opacity:.6;">{{ demandes|length }} demande(s) en attente</span>
+        </div>
+
+        {% for message in app.flashes('success') %}
+            <div class="alert alert-success">{{ message }}</div>
+        {% endfor %}
+        {% for message in app.flashes('danger') %}
+            <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+
+        {% if demandes|length == 0 %}
+            <div class="card" style="text-align:center;padding:48px;">
+                <div style="font-size:40px;margin-bottom:12px;">✅</div>
+                <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Aucune demande en attente</div>
+                <div style="font-size:13px;opacity:.5;">Toutes les opérations ont été traitées.</div>
+            </div>
+        {% else %}
+            <div class="card" style="padding:0;overflow:hidden;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Opération</th>
+                            <th>Adhérent concerné</th>
+                            <th>Initiateur</th>
+                            <th>Votes</th>
+                            <th>Progression</th>
+                            <th>Expire</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in demandes %}
+                        <tr>
+                            <td style="font-size:12px;opacity:.6;">#{{ d.id_approbation }}</td>
+                            <td>
+                                <span class="badge" style="background:
+                                    {% if d.type_operation == 'ajout' %}#276749
+                                    {% elseif d.type_operation == 'modification' %}#2c5282
+                                    {% else %}#742a2a{% endif %};color:#fff;">
+                                    {{ d.type_operation }}
+                                </span>
+                            </td>
+                            <td>
+                                <strong>{{ d.prenom_adht ?? '—' }} {{ d.nom_adht ?? '' }}</strong>
+                            </td>
+                            <td style="font-size:13px;">
+                                {{ d.init_prenom ?? '—' }} {{ d.init_nom ?? '' }}
+                            </td>
+                            <td style="text-align:center;">
+                                <span style="font-size:14px;font-weight:600;">{{ d.nb_approuve }}</span>
+                                <span style="font-size:12px;opacity:.5;">/4</span>
+                            </td>
+                            <td style="min-width:120px;">
+                                <div style="background:rgba(255,255,255,.1);border-radius:4px;height:8px;overflow:hidden;">
+                                    <div style="background:#38a169;height:100%;width:{{ (d.nb_approuve / 4 * 100)|round }}%;transition:width .3s;"></div>
+                                </div>
+                            </td>
+                            <td style="font-size:12px;opacity:.6;">
+                                {% if d.date_expiration %}
+                                    {{ d.date_expiration|date('d/m/Y H:i') }}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ path('app_approbation_show', {id: d.id_approbation}) }}"
+                                   class="btn btn-primary btn-sm">
+                                    Voir / Voter
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
+        {# Légende du workflow #}
+        <div class="card" style="margin-top:20px;">
+            <div class="card-title">Règles d'approbation</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;">
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:4px;">Vote 1 — Initiateur</div>
+                    <div style="opacity:.6;">Admin de la même section qui soumet la demande (vote automatique)</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:4px;">Vote 2 — Même section</div>
+                    <div style="opacity:.6;">Un autre admin de la même section que l'initiateur</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:4px;">Vote 3 — Autre section</div>
+                    <div style="opacity:.6;">Un admin d'une section différente</div>
+                </div>
+                <div style="padding:10px;border-radius:6px;border:1px solid rgba(255,255,255,.1);">
+                    <div style="font-weight:600;margin-bottom:4px;">Vote 4 — Autre section</div>
+                    <div style="opacity:.6;">Un second admin d'une section différente</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+    body.theme-dark .btn-primary:hover { background:#3182ce; }
+    body.theme-sky  .btn-primary:hover { background:#2c5282; }
+</style>
+{% endblock %}

@@ -1,0 +1,61 @@
+{# templates/approbation/token_confirmer.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Confirmer votre vote — Comité Maoré{% endblock %}
+{% block body_theme %}default{% endblock %}
+
+{% block body %}
+<style>
+  body.theme-default{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(160deg,#14532d,#166534);}
+  .box{background:#fff;border-radius:14px;padding:40px;max-width:480px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);}
+  h2{color:#166534;font-size:20px;margin-bottom:20px;}
+  .info{background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:16px;margin-bottom:20px;font-size:14px;}
+  .btn{display:inline-block;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;cursor:pointer;border:none;text-decoration:none;}
+  .btn-green{background:#38a169;color:#fff;}
+  .btn-red{background:#e53e3e;color:#fff;}
+  .btn-green:hover{background:#2f855a;}
+  .btn-red:hover{background:#c53030;}
+</style>
+
+<div class="box">
+  <h2>🏛 Comité Maoré — Confirmer votre vote</h2>
+
+  <div class="info">
+    <strong>Demande #{{ approbation.id_approbation }}</strong><br>
+    Opération : <strong>{{ approbation.type_operation }}</strong><br>
+    {% if adherent %}
+      Adhérent concerné : {{ adherent.prenom_adht }} {{ adherent.nom_adht }}<br>
+    {% endif %}
+    Votre rôle : <strong>{{ tokenRow.role_destinataire }}</strong>
+  </div>
+
+  <p style="font-size:14px;color:#4a5568;margin-bottom:20px;">
+    {% if decision == 'approuve' %}
+      Vous êtes sur le point d'<strong style="color:#276749;">approuver</strong> cette demande.
+    {% else %}
+      Vous êtes sur le point de <strong style="color:#c53030;">rejeter</strong> cette demande.
+    {% endif %}
+    Cette action est <strong>irréversible</strong>.
+  </p>
+
+  <form method="post">
+    <div style="display:flex;gap:12px;">
+      {% if decision == 'approuve' %}
+        <button type="submit" class="btn btn-green">✓ Confirmer l'approbation</button>
+      {% else %}
+        <button type="submit" class="btn btn-red">✗ Confirmer le rejet</button>
+      {% endif %}
+      <a href="/" class="btn" style="background:#e2e8f0;color:#4a5568;">Annuler</a>
+    </div>
+  </form>
+
+  <p style="font-size:11px;color:#a0aec0;margin-top:20px;">
+    Token expire le {{ tokenRow.expire_a|date('d/m/Y à H\hi') }}
+  </p>
+</div>
+{% endblock %}
+
+
+{# ============================================================ #}
+{# FIN token_confirmer.html.twig                                #}
+{# DÉBUT token_resultat.html.twig dans un fichier séparé        #}
+{# ============================================================ #}

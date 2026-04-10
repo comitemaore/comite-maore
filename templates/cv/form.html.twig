@@ -1,0 +1,96 @@
+{# templates/cv/form.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}CV — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+{% block navbar %}
+<nav class="navbar">
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+  <!-- 🌿 -->
+  <div class="navbar-right">
+    <a href="{{ path('app_cv_show', {idAdht: adherent.id_adht}) }}" class="btn btn-secondary btn-sm">← CV</a>
+    <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+  </div>
+</nav>
+{% endblock %}
+{% block body %}
+<div class="layout">
+  <aside class="sidebar">
+    <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+    <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+    <a href="{{ path('app_cv_show', {idAdht: adherent.id_adht}) }}" class="active">📄 CV</a>
+    <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+    <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+  </aside>
+  <main class="main-content">
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:20px;">
+      {{ mode == 'ajouter' ? '➕ Ajouter une entrée CV' : '✏️ Modifier une entrée CV' }}
+      — {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
+    </h1>
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <form method="post">
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label>Type</label>
+            <select name="type_entree" class="form-control" required>
+              <option value="etude"      {{ (entree.type_entree ?? '') == 'etude'      ? 'selected' : '' }}>📚 Études suivies</option>
+              <option value="diplome"    {{ (entree.type_entree ?? '') == 'diplome'    ? 'selected' : '' }}>🎓 Diplôme obtenu</option>
+              <option value="experience" {{ (entree.type_entree ?? '') == 'experience' ? 'selected' : '' }}>💼 Expérience</option>
+              <option value="note"       {{ (entree.type_entree ?? '') == 'note'       ? 'selected' : '' }}>📝 Note particulière</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ordre d'affichage</label>
+            <input type="number" name="ordre_affichage" class="form-control" min="0"
+                   value="{{ entree.ordre_affichage ?? 0 }}">
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Intitulé *</label>
+            <input type="text" name="intitule" class="form-control" required
+                   placeholder="ex: Master Informatique, Baccalauréat S, Chef de projet..."
+                   value="{{ entree.intitule ?? '' }}">
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Établissement / Entreprise</label>
+            <input type="text" name="etablissement" class="form-control"
+                   placeholder="ex: Université de Paris, Société XYZ..."
+                   value="{{ entree.etablissement ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Période / Année début</label>
+            <input type="text" name="periode_debut" class="form-control"
+                   placeholder="ex: 2015 ou 09/2015"
+                   value="{{ entree.periode_debut ?? '' }}">
+          </div>
+          <div class="form-group">
+            <label>Période / Année fin</label>
+            <input type="text" name="periode_fin" class="form-control"
+                   placeholder="ex: 2018 ou en cours"
+                   value="{{ entree.periode_fin ?? '' }}">
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Mention / Grade</label>
+            <input type="text" name="mention" class="form-control"
+                   placeholder="ex: Très Bien, Licence, Master..."
+                   value="{{ entree.mention ?? '' }}">
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Notes particulières</label>
+            <textarea name="notes_particulieres" class="form-control" rows="3"
+                      placeholder="Toute information complémentaire...">{{ entree.notes_particulieres ?? '' }}</textarea>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="btn btn-success">💾 Enregistrer</button>
+        <a href="{{ path('app_cv_show', {idAdht: adherent.id_adht}) }}" class="btn btn-secondary">Annuler</a>
+      </div>
+    </form>
+  </main>
+</div>
+{% endblock %}
+
+
+{# ============================================================ #}
+{# templates/log/list.html.twig                                 #}
+{# ============================================================ #}

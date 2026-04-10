@@ -1,0 +1,122 @@
+{# templates/finance/show.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Fiche financière — {{ adherent.nom_adht }}{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block body %}
+<div class="layout">
+
+    {# ================= SIDEBAR ================= #}
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_finance_show', {'idAdht': adherent.id_adht}) }}" class="active">
+            💰 Finance
+        </a>
+
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    {# ================= CONTENT ================= #}
+    <main class="main-content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h1 style="font-size:22px;font-weight:700;">
+                💰 Fiche financière — {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
+            </h1>
+
+            <a href="{{ path('app_finance_operation', {'idAdht': adherent.id_adht}) }}"
+               class="btn btn-success">
+                + Nouvelle opération
+            </a>
+        </div>
+
+        {# ================= INFOS ADHÉRENT ================= #}
+        <div class="card" style="padding:16px;margin-bottom:15px;">
+            <h3>👤 Informations adhérent</h3>
+
+            <table class="table table-bordered">
+                <tr><th>ID</th><td>{{ adherent.id_adht }}</td></tr>
+                <tr><th>Nom</th><td>{{ adherent.nom_adht }}</td></tr>
+                <tr><th>Prénom</th><td>{{ adherent.prenom_adht }}</td></tr>
+                <tr><th>Section</th><td>{{ adherent.id_section }}</td></tr>
+                <tr><th>Login</th><td>{{ adherent.login_adht }}</td></tr>
+            </table>
+        </div>
+
+        {# ================= COTISATIONS DUES ================= #}
+        <div class="card" style="padding:16px;margin-bottom:15px;">
+            <h3>⚠️ Cotisations dues</h3>
+
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Année</th>
+                        <th>Montant dû</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in cotisations_dues %}
+                        <tr>
+                            <td>{{ c.annee }}</td>
+                            <td>{{ c.montant_du }}</td>
+                            <td>{{ c.statut }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="3">Aucune cotisation due</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# ================= HISTORIQUE ================= #}
+        <div class="card" style="padding:16px;">
+            <h3>📜 Historique financier</h3>
+
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Montant</th>
+                        <th>Répartition BNE</th>
+                        <th>FED</th>
+                        <th>SECTION</th>
+                        <th>Note</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for h in historique %}
+                        <tr>
+                            <td>{{ h.date_operation }}</td>
+                            <td>{{ h.type_operation }}</td>
+                            <td>{{ h.montant }}</td>
+                            <td>{{ h.montant_burnatexec }}</td>
+                            <td>{{ h.montant_fedcorresp }}</td>
+                            <td>{{ h.montant_sectcorresp }}</td>
+                            <td>{{ h.note }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7">Aucune opération financière</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+</div>
+{% endblock %}

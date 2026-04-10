@@ -1,0 +1,134 @@
+{# templates/log/today.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Logs du jour — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <div class="navbar-right">
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_log_list') }}">📋 Tous les logs</a>
+        <a href="{{ path('app_log_today') }}" class="active">📅 Logs du jour</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
+                    📅 Activités du jour
+                </h1>
+                <p style="font-size:13px;opacity:.6;">
+                    {{ "now"|date("d/m/Y") }} —
+                    {% if current %}
+                        connecté en tant que <strong>{{ current.login_adht }}</strong>
+                    {% else %}
+                        toutes les sessions
+                    {% endif %}
+                </p>
+            </div>
+            <span style="font-size:13px;opacity:.6;">{{ logs|length }} opération(s)</span>
+        </div>
+
+        {% if logs|length == 0 %}
+            <div class="card" style="text-align:center;padding:48px;">
+                <div style="font-size:40px;margin-bottom:12px;">📭</div>
+                <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Aucune activité aujourd'hui</div>
+                <div style="font-size:13px;opacity:.5;">Les opérations effectuées aujourd'hui apparaîtront ici.</div>
+            </div>
+        {% else %}
+            {# Résumé par module #}
+            {% set modules = [] %}
+            {% for log in logs %}
+                {% if log.module and log.module not in modules %}
+                    {% set modules = modules|merge([log.module]) %}
+                {% endif %}
+            {% endfor %}
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+                {% for mod in modules %}
+                    {% set count = logs|filter(l => l.module == mod)|length %}
+                    <div style="padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.12);font-size:13px;">
+                        <span style="opacity:.6;">{{ mod }}</span>
+                        <strong style="margin-left:6px;">{{ count }}</strong>
+                    </div>
+                {% endfor %}
+                <div style="padding:8px 16px;border-radius:8px;background:rgba(255,255,255,.05);font-size:13px;">
+                    Total : <strong>{{ logs|length }}</strong>
+                </div>
+            </div>
+
+            <div class="card" style="padding:0;overflow:hidden;">
+                <div style="overflow-x:auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Heure</th>
+                                <th>Utilisateur</th>
+                                <th>Module</th>
+                                <th>Action</th>
+                                <th>Cible</th>
+                                <th>Détail</th>
+                                <th>IP</th>
+                                <th>Résultat</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                            <tr>
+                                <td style="font-size:12px;white-space:nowrap;opacity:.7;">
+                                    {{ log.date_action|date('H:i:s') }}
+                                </td>
+                                <td style="font-size:12px;">
+                                    {{ log.login_adht ?? 'anonymous' }}
+                                </td>
+                                <td>
+                                    {% if log.module %}
+                                        <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(255,255,255,.08);">
+                                            {{ log.module }}
+                                        </span>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td style="font-size:12px;">{{ log.action }}</td>
+                                <td style="font-size:12px;opacity:.7;">{{ log.id_cible ?? '—' }}</td>
+                                <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.6;"
+                                    title="{{ log.detail ?? '' }}">
+                                    {{ log.detail ? log.detail|slice(0, 60) ~ (log.detail|length > 60 ? '…' : '') : '—' }}
+                                </td>
+                                <td style="font-size:11px;opacity:.5;">{{ log.ip_adresse ?? '—' }}</td>
+                                <td>
+                                    <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;
+                                        background:{% if log.resultat == 'succes' %}#1c4532{% elseif log.resultat == 'echec' %}#2d0000{% else %}#1a2744{% endif %};
+                                        color:{% if log.resultat == 'succes' %}#68d391{% elseif log.resultat == 'echec' %}#fc8181{% else %}#90cdf4{% endif %};">
+                                        {{ log.resultat }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="margin-top:12px;text-align:right;">
+                <a href="{{ path('app_log_list') }}" class="btn btn-secondary btn-sm">
+                    Voir tous les logs →
+                </a>
+            </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{# templates/organigramme/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Organigramme — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_organigramme') }}" class="active">🏛 Organigramme</a>
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">🏛 Organigramme</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Gestion des fonctions par section, fédération et bureau exécutif national.
+            Modification réservée à <code>admin</code>.
+        </p>
+
+        {% for msg in app.flashes('success') %}<div class="alert alert-success">{{ msg }}</div>{% endfor %}
+
+        {# ====== BUREAU EXÉCUTIF NATIONAL ====== #}
+        <div class="card" style="margin-bottom:20px;border:1px solid rgba(239,159,39,.3);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <div class="card-title" style="margin:0;color:#fbd38d;">
+                    🏛 Bureau Exécutif National
+                    {% if bureau.annee_mandat %}
+                        <span style="font-size:12px;font-weight:400;opacity:.6;margin-left:8px;">
+                            Mandat {{ bureau.annee_mandat }}
+                        </span>
+                    {% endif %}
+                </div>
+                <a href="{{ path('app_organigramme_bureau') }}" class="btn btn-sm"
+                   style="background:rgba(239,159,39,.2);color:#fbd38d;border:1px solid rgba(239,159,39,.4);">
+                    ✏️ Modifier
+                </a>
+            </div>
+            {% if bureau is empty %}
+                <p style="font-size:13px;opacity:.5;">Aucun bureau configuré.</p>
+            {% else %}
+                {{ _self.fonctionsGrid(bureauNoms, fonctions) }}
+            {% endif %}
+        </div>
+
+        {# ====== FÉDÉRATIONS ====== #}
+        <h2 style="font-size:17px;font-weight:600;margin-bottom:12px;opacity:.8;">
+            Fédérations ({{ federations|length }})
+        </h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:16px;margin-bottom:24px;">
+            {% for fed in federations %}
+            <div class="card" style="border:1px solid rgba(99,179,237,.2);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div class="card-title" style="margin:0;color:#90cdf4;">
+                        🏘 {{ fed.nom_complet ?? fed.federation }}
+                        <span style="font-size:11px;opacity:.5;margin-left:6px;">{{ fed.federation }}</span>
+                    </div>
+                    <a href="{{ path('app_organigramme_federation', {id: fed.id_federation}) }}"
+                       class="btn btn-sm"
+                       style="background:rgba(99,179,237,.15);color:#90cdf4;border:1px solid rgba(99,179,237,.3);">
+                        ✏️
+                    </a>
+                </div>
+                {{ _self.fonctionsGrid(fed._noms, fonctions) }}
+            </div>
+            {% endfor %}
+        </div>
+
+        {# ====== SECTIONS ====== #}
+        <h2 style="font-size:17px;font-weight:600;margin-bottom:12px;opacity:.8;">
+            Sections ({{ sections|length }})
+        </h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:16px;">
+            {% for sec in sections %}
+            <div class="card" style="border:1px solid rgba(104,211,145,.2);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div class="card-title" style="margin:0;color:#9ae6b4;">
+                        📍 {{ sec.section }}
+                        <span style="font-size:11px;opacity:.4;margin-left:6px;">#{{ sec.id_section }}</span>
+                    </div>
+                    <a href="{{ path('app_organigramme_section', {id: sec.id_section}) }}"
+                       class="btn btn-sm"
+                       style="background:rgba(104,211,145,.15);color:#9ae6b4;border:1px solid rgba(104,211,145,.3);">
+                        ✏️
+                    </a>
+                </div>
+                {{ _self.fonctionsGrid(sec._noms, fonctions) }}
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+</div>
+
+{# Macro grille des fonctions #}
+{% macro fonctionsGrid(noms, fonctions) %}
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+    {% for col, label in fonctions %}
+        <div style="padding:6px 8px;border-radius:5px;background:rgba(255,255,255,.04);font-size:12px;">
+            <div style="opacity:.5;margin-bottom:2px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;">
+                {{ label }}
+            </div>
+            <div style="font-weight:500;
+                {% if col starts with 'administrateur' %}color:#90cdf4;
+                {% else %}color:#e2e8f0;{% endif %}">
+                {{ noms[col] ?? '—' }}
+            </div>
+        </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+{% endblock %}

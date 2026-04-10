@@ -1,0 +1,94 @@
+{# templates/document/upload.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Upload document — Comité Maoré{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <a href="{{ path('app_document_list', {idAdht: adherent.id_adht}) }}"
+           class="btn btn-secondary btn-sm">← Documents</a>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_document_list', {idAdht: adherent.id_adht}) }}" class="active">📁 Documents</a>
+        {% if is_admin %}
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">📎 Ajouter un document</h1>
+        <p style="font-size:13px;opacity:.6;margin-bottom:24px;">
+            Adhérent : <strong>{{ adherent.prenom_adht }} {{ adherent.nom_adht }}</strong>
+        </p>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <div class="card" style="max-width:600px;">
+            <form method="post"
+                  action="{{ path('app_document_upload', {idAdht: adherent.id_adht}) }}"
+                  enctype="multipart/form-data">
+
+                <div class="form-group">
+                    <label>Fichier à uploader *</label>
+                    <input type="file" name="fichier" class="form-control" required
+                           accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx">
+                    <small style="font-size:11px;opacity:.5;margin-top:4px;display:block;">
+                        Formats acceptés : PDF, images (JPG, PNG, GIF), Word, Excel — Max 10 Mo
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label>Titre du document *</label>
+                    <input type="text" name="titre_doc" class="form-control" required
+                           placeholder="ex: Pièce d'identité, Diplôme Master, Contrat...">
+                </div>
+
+                <div class="form-group">
+                    <label>Type de document</label>
+                    <select name="type_doc" class="form-control">
+                        <option value="">-- Choisir un type --</option>
+                        {% for type in [
+                            "Pièce d'identité",
+                            'Diplôme',
+                            'Contrat',
+                            'Attestation',
+                            'Certificat',
+                            'Photo',
+                            'Autre'
+                        ] %}
+                            <option value="{{ type }}">{{ type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Description (optionnel)</label>
+                    <textarea name="description" class="form-control" rows="3"
+                              placeholder="Informations complémentaires sur ce document..."></textarea>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:8px;">
+                    <button type="submit" class="btn btn-success">📎 Uploader le document</button>
+                    <a href="{{ path('app_document_list', {idAdht: adherent.id_adht}) }}"
+                       class="btn btn-secondary">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}
