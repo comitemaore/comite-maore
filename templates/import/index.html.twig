@@ -1,0 +1,197 @@
+{# templates/import/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Import CSV — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
+        <a href="{{ path('app_import') }}" class="active">📥 Import CSV</a>
+        <a href="{{ path('app_dbadmin') }}">🛠 Admin BDD</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">📥 Import CSV — Fonctionnaires & Administrateurs</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Importez les membres de l'organigramme via 3 fichiers CSV distincts.
+            Les adhérents sont créés ou mis à jour dans <code>comitemaore_adherent</code>,
+            puis leurs <code>id_adht</code> sont affectés aux colonnes de fonctions des tables correspondantes.
+        </p>
+
+        {% for msg in app.flashes('danger') %}<div class="alert alert-danger">{{ msg }}</div>{% endfor %}
+
+        {# MODE D'IMPORT #}
+        <div class="card" style="margin-bottom:20px;padding:16px 20px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Mode d'import :</div>
+            <div style="display:flex;gap:20px;font-size:13px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="mode_global" value="upsert" checked
+                           onchange="setMode(this.value)"> Upsert
+                    <span style="opacity:.5;">(créer si absent, mettre à jour si existant)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="mode_global" value="insert"
+                           onchange="setMode(this.value)"> Insert uniquement
+                    <span style="opacity:.5;">(ignorer les existants)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="mode_global" value="update"
+                           onchange="setMode(this.value)"> Update uniquement
+                    <span style="opacity:.5;">(mettre à jour, ne pas créer)</span>
+                </label>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+
+            {# ====== BUREAU EXÉCUTIF NATIONAL ====== #}
+            <div class="card" style="border:1px solid rgba(239,159,39,.3);">
+                <div class="card-title" style="color:#fbd38d;">🏛 Bureau Exécutif National</div>
+                <p style="font-size:12px;opacity:.6;margin-bottom:14px;">
+                    Colonnes requises : <code>fonction, prenom, nom, email</code><br>
+                    Colonnes optionnelles : <code>telephone, profession, adresse, ville, cp</code>
+                </p>
+                <div style="font-size:11px;opacity:.5;margin-bottom:12px;">
+                    Fonctions valides :
+                    {% for f in fonctions %}
+                        <code>{{ f }}</code>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+                <form method="post" enctype="multipart/form-data"
+                      action="{{ path('app_import_process', {type: 'bureau'}) }}"
+                      onsubmit="return confirmerImport('bureau exécutif national');">
+                    <input type="hidden" name="_token" value="{{ csrf_token('import_bureau') }}">
+                    <input type="hidden" name="mode" class="mode-input" value="upsert">
+                    <div class="form-group">
+                        <label>Fichier CSV</label>
+                        <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(239,159,39,.2);color:#fbd38d;border:1px solid rgba(239,159,39,.4);">
+                        📥 Importer
+                    </button>
+                </form>
+            </div>
+
+            {# ====== FÉDÉRATIONS ====== #}
+            <div class="card" style="border:1px solid rgba(99,179,237,.3);">
+                <div class="card-title" style="color:#90cdf4;">🏘 Fédérations</div>
+                <p style="font-size:12px;opacity:.6;margin-bottom:14px;">
+                    Colonnes requises : <code>federation, fonction, prenom, nom, email</code><br>
+                    Colonnes optionnelles : <code>nom_complet, section, telephone, profession, adresse, ville, cp</code>
+                </p>
+                <div style="font-size:11px;opacity:.5;margin-bottom:12px;">
+                    La colonne <code>federation</code> est le code court (ex: IDF, SUD...).
+                    La fédération est créée automatiquement si elle n'existe pas.
+                </div>
+                <form method="post" enctype="multipart/form-data"
+                      action="{{ path('app_import_process', {type: 'federations'}) }}"
+                      onsubmit="return confirmerImport('fédérations');">
+                    <input type="hidden" name="_token" value="{{ csrf_token('import_federations') }}">
+                    <input type="hidden" name="mode" class="mode-input" value="upsert">
+                    <div class="form-group">
+                        <label>Fichier CSV</label>
+                        <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(99,179,237,.2);color:#90cdf4;border:1px solid rgba(99,179,237,.4);">
+                        📥 Importer
+                    </button>
+                </form>
+            </div>
+
+            {# ====== SECTIONS ====== #}
+            <div class="card" style="border:1px solid rgba(104,211,145,.3);">
+                <div class="card-title" style="color:#9ae6b4;">📍 Sections</div>
+                <p style="font-size:12px;opacity:.6;margin-bottom:14px;">
+                    Colonnes requises : <code>section, fonction, prenom, nom, email</code><br>
+                    Colonnes optionnelles : <code>federation, telephone, profession, adresse, ville, cp</code>
+                </p>
+                <div style="font-size:11px;opacity:.5;margin-bottom:12px;">
+                    La colonne <code>section</code> est le nom de la section.
+                    La section est créée automatiquement si elle n'existe pas.
+                </div>
+                <form method="post" enctype="multipart/form-data"
+                      action="{{ path('app_import_process', {type: 'sections'}) }}"
+                      onsubmit="return confirmerImport('sections');">
+                    <input type="hidden" name="_token" value="{{ csrf_token('import_sections') }}">
+                    <input type="hidden" name="mode" class="mode-input" value="upsert">
+                    <div class="form-group">
+                        <label>Fichier CSV</label>
+                        <input type="file" name="csv_file" class="form-control" accept=".csv" required>
+                    </div>
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(104,211,145,.2);color:#9ae6b4;border:1px solid rgba(104,211,145,.4);">
+                        📥 Importer
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {# GUIDE FORMAT CSV #}
+        <div class="card" style="margin-top:20px;">
+            <div class="card-title">📋 Guide du format CSV</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;font-size:12px;">
+                <div>
+                    <div style="font-weight:600;margin-bottom:6px;color:#fbd38d;">Bureau Exécutif National</div>
+                    <pre style="background:rgba(255,255,255,.05);padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;">fonction,prenom,nom,email
+president,Jean,DUPONT,j.dupont@...
+vice_president,Marie,MARTIN,m.martin@...
+secretaire,Ahmed,SAID,a.said@...</pre>
+                </div>
+                <div>
+                    <div style="font-weight:600;margin-bottom:6px;color:#90cdf4;">Fédérations</div>
+                    <pre style="background:rgba(255,255,255,.05);padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;">federation,nom_complet,fonction,prenom,nom,email
+IDF,Féd. Île-de-France,president,Jean,DUPONT,j@...
+IDF,Féd. Île-de-France,secretaire,Marie,MARTIN,m@...
+SUD,Féd. Sud,president,Ahmed,SAID,a@...</pre>
+                </div>
+                <div>
+                    <div style="font-weight:600;margin-bottom:6px;color:#9ae6b4;">Sections</div>
+                    <pre style="background:rgba(255,255,255,.05);padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;">section,federation,fonction,prenom,nom,email
+Paris 1,IDF,president,Jean,DUPONT,j@...
+Paris 1,IDF,secretaire,Marie,MARTIN,m@...
+Marseille,SUD,president,Ahmed,SAID,a@...</pre>
+                </div>
+            </div>
+            <div style="margin-top:12px;font-size:12px;opacity:.5;">
+                💡 Séparateur virgule (,) ou point-virgule (;) acceptés · Encodage UTF-8 recommandé ·
+                La première ligne doit être l'en-tête · Les lignes vides sont ignorées
+            </div>
+        </div>
+    </main>
+</div>
+
+<style>
+    code{font-family:'Courier New',monospace;font-size:11px;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;}
+    pre{margin:0;white-space:pre-wrap;}
+</style>
+
+<script>
+function setMode(val) {
+    document.querySelectorAll('.mode-input').forEach(i => i.value = val);
+}
+function confirmerImport(type) {
+    const mode = document.querySelector('input[name="mode_global"]:checked').value;
+    const labels = {upsert:'créer et mettre à jour',insert:'créer uniquement',update:'mettre à jour uniquement'};
+    return confirm(`Importer le CSV ${type} en mode « ${labels[mode]} » ?\n\nCette opération modifie la base de données.`);
+}
+</script>
+{% endblock %}

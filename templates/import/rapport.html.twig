@@ -1,0 +1,115 @@
+{# templates/import/rapport.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Rapport d'import — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <a href="{{ path('app_import') }}" class="btn btn-secondary btn-sm">← Nouvel import</a>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
+        <a href="{{ path('app_import') }}" class="active">📥 Import CSV</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">📊 Rapport d'import</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:20px;">
+            Fichier : <strong>{{ fichier }}</strong> ·
+            Type : <strong>{{ type }}</strong> ·
+            Mode : <strong>{{ mode }}</strong>
+        </p>
+
+        {# Résumé #}
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">
+            <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:#9ae6b4;">{{ rapport.nb_succes }}</div>
+                <div style="font-size:12px;opacity:.6;">Succès</div>
+            </div>
+            <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:#90cdf4;">{{ rapport.nb_crees }}</div>
+                <div style="font-size:12px;opacity:.6;">Adhérents créés</div>
+            </div>
+            <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:#fbd38d;">{{ rapport.nb_maj }}</div>
+                <div style="font-size:12px;opacity:.6;">Mis à jour</div>
+            </div>
+            <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:#a0aec0;">{{ rapport.nb_ignores }}</div>
+                <div style="font-size:12px;opacity:.6;">Ignorés</div>
+            </div>
+            <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:14px;text-align:center;">
+                <div style="font-size:28px;font-weight:700;color:#fc8181;">{{ rapport.nb_erreurs }}</div>
+                <div style="font-size:12px;opacity:.6;">Erreurs</div>
+            </div>
+        </div>
+
+        {# Nouvelles entités créées #}
+        {% if rapport.crees|length > 0 %}
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-title" style="color:#90cdf4;">🆕 Entités créées (sections/fédérations)</div>
+            {% for msg in rapport.crees %}
+                <div style="font-size:13px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);">{{ msg }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Succès #}
+        {% if rapport.succes|length > 0 %}
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-title" style="color:#9ae6b4;">✓ Lignes traitées avec succès</div>
+            <div style="max-height:280px;overflow-y:auto;">
+                {% for msg in rapport.succes %}
+                    <div style="font-size:12px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04);
+                                font-family:monospace;">{{ msg }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Ignorés #}
+        {% if rapport.ignores|length > 0 %}
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-title" style="color:#a0aec0;">⏭ Lignes ignorées</div>
+            <div style="max-height:180px;overflow-y:auto;">
+                {% for msg in rapport.ignores %}
+                    <div style="font-size:12px;padding:3px 0;opacity:.7;">{{ msg }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Erreurs #}
+        {% if rapport.erreurs|length > 0 %}
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(252,129,129,.3);">
+            <div class="card-title" style="color:#fc8181;">✗ Erreurs ({{ rapport.erreurs|length }})</div>
+            <div style="max-height:280px;overflow-y:auto;">
+                {% for msg in rapport.erreurs %}
+                    <div style="font-size:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);
+                                color:#fc8181;">{{ msg }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div style="display:flex;gap:10px;margin-top:8px;">
+            <a href="{{ path('app_import') }}" class="btn btn-success">📥 Nouvel import</a>
+            <a href="{{ path('app_organigramme') }}" class="btn btn-secondary">🏛 Voir l'organigramme</a>
+            <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">👥 Voir les adhérents</a>
+        </div>
+    </main>
+</div>
+{% endblock %}
