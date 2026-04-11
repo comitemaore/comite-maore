@@ -12,18 +12,22 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_USER')]
 class SearchController extends AbstractController
 {
+    // Valeurs autorisées pour le nombre de résultats par page
+    private const LIMITE_OPTIONS = [25, 50, 100, 250, 500, 1000, 0];
+    // 0 = sans limite (admin uniquement)
+
     public function __construct(private readonly Connection $connection) {}
 
     #[Route('/search', name: 'app_search', methods: ['GET', 'POST'])]
     public function index(Request $request): Response
     {
-        $results = [];
-        $query   = '';
-        $table   = '';
-        $error   = null;
-        $tables  = [];
+        $results    = [];
+        $table      = '';
+        $error      = null;
+        $tables     = [];
+        $totalCount = null;
+        $isAdmin    = $this->isGranted('ROLE_ADMIN');
 
-        // Récupère la liste des tables disponibles
         try {
             $tables = $this->connection->createSchemaManager()->listTableNames();
         } catch (\Exception $e) {
@@ -32,43 +36,79 @@ class SearchController extends AbstractController
 
         if ($request->isMethod('POST')) {
             $table  = $request->request->get('table', '');
-            $query  = trim($request->request->get('query', ''));
             $column = trim($request->request->get('column', '*'));
             $value  = trim($request->request->get('value', ''));
+            $limite = (int) $request->request->get('limite', 100);
+            $page   = max(1, (int) $request->request->get('page', 1));
+
+            // Sécurité : sans limite réservé aux admins
+            if ($limite === 0 && !$isAdmin) {
+                $limite = 500;
+            }
+            // Valider que la limite est dans les options autorisées
+            if (!in_array($limite, self::LIMITE_OPTIONS, true)) {
+                $limite = 100;
+            }
 
             if (empty($table)) {
                 $error = 'Veuillez sélectionner une table.';
             } else {
                 try {
-                    // Requête SELECT sécurisée (lecture uniquement)
+                    $colSql = $column === '*'
+                        ? '*'
+                        : $this->connection->quoteIdentifier($column);
+
+                    $tblSql = $this->connection->quoteIdentifier($table);
+
+                    // Compter le total
                     if ($value !== '') {
-                        $sql = sprintf(
-                            'SELECT %s FROM %s WHERE %s LIKE :val LIMIT 100',
-                            $column === '*' ? '*' : $this->connection->quoteIdentifier($column),
-                            $this->connection->quoteIdentifier($table),
-                            $this->connection->quoteIdentifier($column)
+                        $colWhere   = $this->connection->quoteIdentifier($column === '*' ? 'id' : $column);
+                        $totalCount = (int) $this->connection->fetchOne(
+                            "SELECT COUNT(*) FROM $tblSql WHERE $colWhere LIKE :val",
+                            ['val' => '%' . $value . '%']
                         );
+                    } else {
+                        $totalCount = (int) $this->connection->fetchOne("SELECT COUNT(*) FROM $tblSql");
+                    }
+
+                    // Construire la requête avec pagination
+                    $offset = $limite > 0 ? ($page - 1) * $limite : 0;
+
+                    if ($value !== '') {
+                        $colWhere = $this->connection->quoteIdentifier($column === '*' ? 'id' : $column);
+                        $sql = "SELECT $colSql FROM $tblSql WHERE $colWhere LIKE :val"
+                             . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
                         $results = $this->connection->fetchAllAssociative($sql, ['val' => '%' . $value . '%']);
                     } else {
-                        $sql = sprintf(
-                            'SELECT %s FROM %s LIMIT 100',
-                            $column === '*' ? '*' : $this->connection->quoteIdentifier($column),
-                            $this->connection->quoteIdentifier($table)
-                        );
+                        $sql = "SELECT $colSql FROM $tblSql"
+                             . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
                         $results = $this->connection->fetchAllAssociative($sql);
                     }
+
                 } catch (\Exception $e) {
                     $error = 'Erreur lors de la recherche : ' . $e->getMessage();
                 }
             }
         }
 
+        // Calculer la pagination
+        $totalPages = ($totalCount !== null && isset($limite) && $limite > 0)
+            ? (int) ceil($totalCount / $limite)
+            : 1;
+
         return $this->render('search/index.html.twig', [
-            'tables'  => $tables,
-            'results' => $results,
-            'table'   => $table,
-            'error'   => $error,
-            'is_admin'=> $this->isGranted('ROLE_ADMIN'),
+            'tables'       => $tables,
+            'results'      => $results,
+            'table'        => $table,
+            'error'        => $error,
+            'is_admin'     => $isAdmin,
+            'total_count'  => $totalCount,
+            'total_pages'  => $totalPages,
+            'page'         => $page ?? 1,
+            'limite'       => $limite ?? 100,
+            'limite_options'=> self::LIMITE_OPTIONS,
+            'column'       => $column ?? '*',
+            'value'        => $value ?? '',
         ]);
     }
 }

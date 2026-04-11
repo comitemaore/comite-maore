@@ -1,0 +1,118 @@
+{# templates/search/index.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Recherche — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+    <!-- 🌿 -->
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_search') }}" class="active">🔍 Recherche</a>
+        {% if is_admin %}
+        <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+        <a href="{{ path('app_database') }}">✏️ Modifier la BDD</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">🔍 Recherche de données</h1>
+        <p style="font-size:13px;opacity:.6;margin-bottom:24px;">Consultation en lecture seule de la base de données</p>
+
+        {# FORMULAIRE DE RECHERCHE #}
+        <div class="card">
+            <div class="card-title">Paramètres de recherche</div>
+
+            {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ path('app_search') }}">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+                    <div class="form-group">
+                        <label for="table">Table</label>
+                        <select id="table" name="table" class="form-control" required>
+                            <option value="">-- Choisir une table --</option>
+                            {% for t in tables %}
+                                <option value="{{ t }}" {{ table == t ? 'selected' : '' }}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="column">Colonne (ou * pour tout)</label>
+                        <input id="column" name="column" type="text" class="form-control"
+                               value="*" placeholder="ex: nom, prenom, *">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="value">Valeur recherchée (optionnel)</label>
+                        <input id="value" name="value" type="text" class="form-control"
+                               placeholder="ex: Dupont">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    🔍 Lancer la recherche
+                </button>
+            </form>
+        </div>
+
+        {# RÉSULTATS #}
+        {% if results is defined and results|length > 0 %}
+        <div class="card">
+            <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+                Résultats
+                <span style="font-size:13px;font-weight:400;opacity:.6;">{{ results|length }} ligne(s) trouvée(s)</span>
+            </div>
+
+            <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            {% for col in results[0]|keys %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in results %}
+                        <tr>
+                            {% for cell in row %}
+                                <td>{{ cell is null ? '—' : cell }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% elseif results is defined and results|length == 0 %}
+            <div class="card">
+                <p class="empty-state">Aucun résultat trouvé pour cette recherche.</p>
+            </div>
+        {% endif %}
+    </main>
+</div>
+
+<style>
+    body.theme-dark .btn-primary { background: #4299e1; color: #fff; }
+    body.theme-sky  .btn-primary { background: #2b6cb0; color: #fff; }
+    body.theme-dark .btn-primary:hover { background: #3182ce; }
+    body.theme-sky  .btn-primary:hover { background: #2c5282; }
+</style>
+{% endblock %}
