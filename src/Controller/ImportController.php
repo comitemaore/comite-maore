@@ -285,12 +285,49 @@ class ImportController extends AbstractController
     // ------------------------------------------------------------------
     private function upsertAdherent(array $ligne, ?int $idSection, string $mode, array &$rapport, int $numLigne): ?int
     {
+        $idAdht = (int) trim($ligne['id_adht'] ?? '0');
         $email  = trim($ligne['email'] ?? '');
         $prenom = trim($ligne['prenom'] ?? '');
         $nom    = strtoupper(trim($ligne['nom'] ?? ''));
 
+        // --- PRIORITÉ 1 : id_adht fourni explicitement ---
+        if ($idAdht > 0) {
+            $existing = $this->connection->fetchAssociative(
+                'SELECT id_adht FROM comitemaore_adherent WHERE id_adht = ?', [$idAdht]
+            ) ?: null;
+
+            if (!$existing) {
+                $rapport['erreurs'][] = "Ligne $numLigne : id_adht=$idAdht introuvable dans comitemaore_adherent.";
+                $rapport['nb_erreurs']++;
+                return null;
+            }
+
+            // Mettre à jour les infos si fournies et si mode update/upsert
+            if ($mode !== 'insert' && ($prenom || $nom || $email)) {
+                $maj = array_filter([
+                    'prenom_adht'         => $prenom ?: null,
+                    'nom_adht'            => $nom ?: null,
+                    'email_adht'          => $email ?: null,
+                    'telephonep_adht'     => trim($ligne['telephone'] ?? '') ?: null,
+                    'profession_adht'     => trim($ligne['profession'] ?? '') ?: null,
+                    'id_section'          => $idSection,
+                    'datemodiffiche_adht' => (new \DateTime())->format('Y-m-d'),
+                ]);
+                if ($maj) {
+                    $this->connection->update('comitemaore_adherent', $maj, ['id_adht' => $idAdht]);
+                    $rapport['nb_maj']++;
+                }
+            } else {
+                $rapport['ignores'][] = "Ligne $numLigne : id_adht=$idAdht utilisé directement (mode insert, pas de mise à jour).";
+                $rapport['nb_ignores']++;
+            }
+
+            return $idAdht;
+        }
+
+        // --- PRIORITÉ 2 : pas d'id_adht — recherche ou création ---
         if (empty($prenom) || empty($nom)) {
-            $rapport['erreurs'][] = "Ligne $numLigne : prénom ou nom manquant.";
+            $rapport['erreurs'][] = "Ligne $numLigne : id_adht manquant et prénom/nom insuffisants pour identifier l'adhérent.";
             $rapport['nb_erreurs']++;
             return null;
         }
@@ -324,12 +361,10 @@ class ImportController extends AbstractController
 
         if ($existing) {
             if ($mode === 'insert') {
-                // Ne pas toucher l'existant en mode insert pur
                 $rapport['ignores'][] = "Ligne $numLigne : $prenom $nom déjà existant (ignoré en mode insert).";
                 $rapport['nb_ignores']++;
                 return (int) $existing['id_adht'];
             }
-            // update ou upsert
             $this->connection->update('comitemaore_adherent', $donnees, ['id_adht' => $existing['id_adht']]);
             $rapport['nb_maj']++;
             return (int) $existing['id_adht'];
