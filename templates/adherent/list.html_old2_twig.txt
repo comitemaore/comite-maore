@@ -1,11 +1,12 @@
 {# templates/adherent/list.html.twig #}
 {% extends 'base.html.twig' %}
-{% block title %}Adhérents — Comité Maoré{% endblock %}
+{% block title %}Adhérents — Comité Maore{% endblock %}
 {% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+    <!-- 🌿 -->
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         {% if is_admin %}<span class="badge badge-admin">ADMIN</span>{% else %}<span class="badge badge-user">USER</span>{% endif %}
@@ -21,32 +22,19 @@
     <a href="{{ path('app_adherent_list') }}" class="active">👥 Adhérents</a>
     <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
     <a href="{{ path('app_search') }}">🔍 Recherche</a>
-    {% if is_admin %}<a href="{{ path('app_log_list') }}">📋 Logs</a>{% endif %}
+    {% if is_admin %}
+    <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+    <a href="{{ path('app_log_list') }}">📋 Logs</a>
+    {% endif %}
     <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
     <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
   </aside>
 
   <main class="main-content">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <h1 style="font-size:22px;font-weight:700;">👥 Adhérents</h1>
       <a href="{{ path('app_adherent_new') }}" class="btn btn-success">+ Nouvel adhérent</a>
     </div>
-
-    {% if bypass_actif ?? false %}
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;
-                  background:#1c3a1a;border:1px solid #38a169;margin-bottom:16px;font-size:12px;color:#9ae6b4;">
-        ✅ <strong>Enregistrement direct actif</strong> —
-        {{ statut_bypass.completes }}/20 sections avec 3 admins.
-        Encore {{ statut_bypass.manquantes }} section(s) avant le workflow d'approbation.
-      </div>
-    {% else %}
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;
-                  background:#1a2540;border:1px solid #4299e1;margin-bottom:16px;font-size:12px;color:#90cdf4;">
-        🔒 <strong>Workflow d'approbation actif</strong> —
-        {{ statut_bypass.completes }}/20 sections configurées.
-        Tout ajout nécessite 3 validations.
-      </div>
-    {% endif %}
 
     <div class="card" style="padding:16px;">
       <form method="get" style="display:flex;gap:10px;">

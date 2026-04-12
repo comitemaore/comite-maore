@@ -2,7 +2,6 @@
 
 namespace App\Controller;
 
-use App\Service\ApprobationService;
 use App\Service\LogService;
 use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -16,11 +15,12 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 class AdherentController extends AbstractController
 {
     public function __construct(
-        private readonly Connection          $connection,
-        private readonly LogService          $logService,
-        private readonly ApprobationService  $approbationService,
+        private readonly Connection $connection,
+        private readonly LogService $logService,
     ) {}
 
+    // ------------------------------------------------------------------
+    // Retourne la fiche BDD de l'utilisateur connecté (ou null)
     // ------------------------------------------------------------------
     private function currentAdherent(): ?array
     {
@@ -31,11 +31,16 @@ class AdherentController extends AbstractController
         ) ?: null;
     }
 
+    // ------------------------------------------------------------------
+    // Retourne un tableau utilisable même si l'utilisateur n'a pas
+    // de fiche dans comitemaore_adherent (cas admin/root en mémoire)
+    // ------------------------------------------------------------------
     private function currentAdherentOrFallback(): array
     {
         $adht = $this->currentAdherent();
         if ($adht !== null) return $adht;
 
+        // Prend la première fiche de la table comme proxy
         $first = $this->connection->fetchAssociative(
             'SELECT * FROM comitemaore_adherent ORDER BY id_adht ASC LIMIT 1'
         );
@@ -44,6 +49,8 @@ class AdherentController extends AbstractController
                 'login_adht' => $this->getUser()?->getUserIdentifier() ?? 'unknown',
             ]);
         }
+
+        // Dernier recours : table vide
         return [
             'id_adht'    => 0,
             'login_adht' => $this->getUser()?->getUserIdentifier() ?? 'unknown',
@@ -76,6 +83,7 @@ class AdherentController extends AbstractController
             ->from('comitemaore_adherent', 'a')
             ->orderBy('a.nom_adht', 'ASC');
 
+        // Non-admin : restreint à sa section si sa fiche existe
         if (!$isAdmin && $adht && $adht['id_section']) {
             $qb->andWhere('a.id_section = :sec')
                ->setParameter('sec', $adht['id_section']);
@@ -90,12 +98,10 @@ class AdherentController extends AbstractController
         $this->log('list_adherents', 'info', null, ['search' => $search]);
 
         return $this->render('adherent/list.html.twig', [
-            'adherents'     => $adherents,
-            'search'        => $search,
-            'is_admin'      => $isAdmin,
-            'current'       => $adht,
-            'bypass_actif'  => $this->approbationService->bypassActif(),
-            'statut_bypass' => $this->approbationService->statutBypass(),
+            'adherents' => $adherents,
+            'search'    => $search,
+            'is_admin'  => $isAdmin,
+            'current'   => $adht,
         ]);
     }
 
@@ -109,6 +115,7 @@ class AdherentController extends AbstractController
             'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$id]
         );
         if (!$adherent) throw $this->createNotFoundException("Adhérent #$id introuvable.");
+
         $this->log('view_adherent', 'info', $id);
 
         return $this->render('adherent/show.html.twig', [
@@ -124,44 +131,20 @@ class AdherentController extends AbstractController
     #[Route('/nouveau', name: 'app_adherent_new', methods: ['GET', 'POST'])]
     public function new(Request $request): Response
     {
-        $adht         = $this->currentAdherent();
-        $bypassActif  = $this->approbationService->bypassActif();
-        $error        = null;
+        $adht  = $this->currentAdherent();
+        $error = null;
 
         if ($request->isMethod('POST')) {
-            $data = $this->extractFormData($request);
+            $data       = $this->extractFormData($request);
+            $initiateur = $this->currentAdherentOrFallback();
 
             if (!$this->isGranted('ROLE_ADMIN') && $adht) {
                 $data['id_section'] = $adht['id_section'];
             }
 
-            // ---- BYPASS : exécution directe ----
-            if ($bypassActif) {
-                $data['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
-                $data['cotis_adht']             = 'Non';
-                $data['visibl_adht']            = 'Non';
-                $this->connection->insert('comitemaore_adherent', $data);
-                $idAdht = (int) $this->connection->lastInsertId();
-
-                $statut = $this->approbationService->statutBypass();
-                $this->log('ajout_adherent_direct', 'succes', $idAdht, [
-                    'bypass' => true,
-                    'sections_completes' => $statut['completes'],
-                ]);
-                $this->addFlash('success',
-                    "Adhérent ajouté directement (#$idAdht). "
-                    . "Mode bypass actif ({$statut['completes']}/20 sections configurées)."
-                );
-                return $this->redirectToRoute('app_adherent_show', ['id' => $idAdht]);
-            }
-
-            // ---- WORKFLOW NORMAL : demande d'approbation ----
-            $initiateur    = $this->currentAdherentOrFallback();
             $idApprobation = $this->creerDemandeApprobation($initiateur, 'ajout', $data);
             $this->log('demande_ajout_adherent', 'info', null, ['id_approbation' => $idApprobation]);
-            $this->addFlash('success',
-                "Demande d'ajout créée (#$idApprobation). En attente d'approbations."
-            );
+            $this->addFlash('success', "Demande d'ajout créée (#$idApprobation). En attente d'approbations.");
             return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
         }
 
@@ -170,19 +153,17 @@ class AdherentController extends AbstractController
         );
 
         return $this->render('adherent/form.html.twig', [
-            'adherent'      => [],
-            'sections'      => $sections,
-            'mode'          => 'nouveau',
-            'is_admin'      => $this->isGranted('ROLE_ADMIN'),
-            'current'       => $adht,
-            'error'         => $error,
-            'bypass_actif'  => $bypassActif,
-            'statut_bypass' => $this->approbationService->statutBypass(),
+            'adherent' => [],
+            'sections' => $sections,
+            'mode'     => 'nouveau',
+            'is_admin' => $this->isGranted('ROLE_ADMIN'),
+            'current'  => $adht,
+            'error'    => $error,
         ]);
     }
 
     // ------------------------------------------------------------------
-    // MODIFIER (toujours via workflow)
+    // MODIFIER
     // ------------------------------------------------------------------
     #[Route('/{id}/modifier', name: 'app_adherent_edit', methods: ['GET', 'POST'], requirements: ['id' => '\d+'])]
     public function edit(int $id, Request $request): Response
@@ -211,19 +192,17 @@ class AdherentController extends AbstractController
         );
 
         return $this->render('adherent/form.html.twig', [
-            'adherent'      => $adherent,
-            'sections'      => $sections,
-            'mode'          => 'modifier',
-            'is_admin'      => $this->isGranted('ROLE_ADMIN'),
-            'current'       => $adht,
-            'error'         => null,
-            'bypass_actif'  => false,
-            'statut_bypass' => $this->approbationService->statutBypass(),
+            'adherent' => $adherent,
+            'sections' => $sections,
+            'mode'     => 'modifier',
+            'is_admin' => $this->isGranted('ROLE_ADMIN'),
+            'current'  => $adht,
+            'error'    => null,
         ]);
     }
 
     // ------------------------------------------------------------------
-    // SUPPRIMER (toujours via workflow)
+    // SUPPRIMER
     // ------------------------------------------------------------------
     #[Route('/{id}/supprimer', name: 'app_adherent_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function delete(int $id, Request $request): Response
@@ -248,7 +227,7 @@ class AdherentController extends AbstractController
     }
 
     // ------------------------------------------------------------------
-    // Helpers
+    // Helpers privés
     // ------------------------------------------------------------------
     private function extractFormData(Request $request): array
     {
@@ -301,6 +280,7 @@ class AdherentController extends AbstractController
 
         $idApprobation = (int) $this->connection->lastInsertId();
 
+        // Vote automatique de l'initiateur
         $this->connection->insert('comitemaore_approbation_vote', [
             'id_approbation'    => $idApprobation,
             'id_votant'         => $initiateur['id_adht'],

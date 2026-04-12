@@ -1,10 +1,11 @@
 {# templates/adherent/form.html.twig #}
 {% extends 'base.html.twig' %}
-{% block title %}{{ mode == 'nouveau' ? 'Nouvel adhérent' : 'Modifier adhérent' }} — Comité Maoré{% endblock %}
+{% block title %}{{ mode == 'nouveau' ? 'Nouvel adhérent' : 'Modifier adhérent' }} — Comité Maore{% endblock %}
 {% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
 {% block navbar %}
 <nav class="navbar">
-  <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maore</a>
+  <!-- 🌿 -->
   <div class="navbar-right">
     <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary btn-sm">← Retour</a>
     <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
@@ -18,7 +19,10 @@
     <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
     <a href="{{ path('app_adherent_list') }}" class="active">👥 Adhérents</a>
     <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
-    {% if is_admin %}<a href="{{ path('app_log_list') }}">📋 Logs</a>{% endif %}
+    {% if is_admin %}
+    <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+    <a href="{{ path('app_log_list') }}">📋 Logs</a>
+    {% endif %}
     <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
     <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
   </aside>
@@ -27,39 +31,9 @@
     <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
       {{ mode == 'nouveau' ? '➕ Nouvel adhérent' : '✏️ Modifier adhérent' }}
     </h1>
-
-    {# Indicateur bypass / workflow #}
-    {% if mode == 'nouveau' %}
-      {% if bypass_actif ?? false %}
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;
-                    background:#1c3a1a;border:1px solid #38a169;margin-bottom:16px;font-size:13px;">
-          <span style="font-size:18px;">✅</span>
-          <div>
-            <strong style="color:#9ae6b4;">Enregistrement direct activé</strong>
-            <span style="color:#68d391;margin-left:6px;">
-              ({{ statut_bypass.completes }}/20 sections configurées —
-              encore {{ statut_bypass.manquantes }} section(s) avant l'activation du workflow)
-            </span>
-          </div>
-        </div>
-      {% else %}
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;
-                    background:#2d1a00;border:1px solid #d69e2e;margin-bottom:16px;font-size:13px;">
-          <span style="font-size:18px;">⚠️</span>
-          <div>
-            <strong style="color:#fbd38d;">Workflow d'approbation requis</strong>
-            <span style="color:#f6ad55;margin-left:6px;">
-              ({{ statut_bypass.completes }}/20 sections configurées —
-              l'ajout sera soumis à 3 administrateurs)
-            </span>
-          </div>
-        </div>
-      {% endif %}
-    {% else %}
-      <p style="font-size:13px;opacity:.55;margin-bottom:16px;">
-        ⚠ La modification nécessite l'approbation de 3 administrateurs.
-      </p>
-    {% endif %}
+    <p style="font-size:13px;opacity:.55;margin-bottom:20px;">
+      ⚠ Cette opération nécessite l'approbation de 3 administrateurs avant d'être effective.
+    </p>
 
     {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 
@@ -147,8 +121,8 @@
             <select name="id_section" class="form-control" {{ not is_admin ? 'disabled' : '' }}>
               <option value="">-- Choisir --</option>
               {% for s in sections %}
-                <option value="{{ s.id_section }}" {{ adherent.id_section ?? '' == s.id_section ? 'selected' : '' }}>
-                  {{ s.nom_section }}
+                <option value="{{ s.id_section }}" {{ (adherent.id_section ?? '') == s.id_section ? 'selected' : '' }}>
+                  {{ s.section }}
                 </option>
               {% endfor %}
             </select>
