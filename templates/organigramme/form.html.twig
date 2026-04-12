@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         <a href="{{ back_url }}" class="btn btn-secondary btn-sm">← Retour</a>
@@ -27,16 +27,26 @@
 
     <main class="main-content">
         <h1 style="font-size:21px;font-weight:700;margin-bottom:4px;">✏️ {{ titre }}</h1>
-        <p style="font-size:13px;opacity:.5;margin-bottom:20px;">
-            Sélectionnez un adhérent pour chaque fonction. Tapez un nom pour filtrer la liste.
+        <p style="font-size:13px;opacity:.5;margin-bottom:6px;">
+            Chaque liste affiche : <code>NOM Prénom — id_adht : X — NIN : Y</code><br>
             Seul <code>admin</code> peut enregistrer les modifications.
         </p>
+
+        {# Barre de recherche globale #}
+        <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
+            <input type="text" id="globalSearch" class="form-control"
+                   placeholder="Filtrer les adhérents dans toutes les listes..."
+                   style="max-width:400px;"
+                   oninput="filterAll(this.value)">
+            <button type="button" onclick="clearSearch()" class="btn btn-secondary btn-sm">✕ Effacer</button>
+            <span style="font-size:12px;opacity:.4;">{{ adherents|length }} adhérent(s) disponibles</span>
+        </div>
 
         {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 
         <form method="post" id="orgForm">
 
-            {# Nom du bureau (uniquement pour mode bureau) #}
+            {# Nom du bureau (mode bureau) #}
             {% if mode == 'bureau' %}
             <div class="card" style="margin-bottom:16px;">
                 <div class="form-group" style="max-width:400px;margin:0;">
@@ -47,76 +57,83 @@
             </div>
             {% endif %}
 
-            {# Nom complet (uniquement pour mode fédération) #}
+            {# Nom complet fédération #}
             {% if mode == 'federation' %}
             <div class="card" style="margin-bottom:16px;">
                 <div class="form-group" style="max-width:400px;margin:0;">
-                    <label>Nom complet de la fédération</label>
+                    <label>Nom complet</label>
                     <input type="text" name="nom_complet" class="form-control"
                            value="{{ entite.nom_complet ?? '' }}"
-                           placeholder="ex: Fédération Maoré Île-de-France">
+                           placeholder="Nom complet de la fédération">
                 </div>
             </div>
             {% endif %}
 
-            {# Barre de recherche adhérent globale #}
-            <div style="margin-bottom:16px;padding:12px 16px;border-radius:8px;
-                        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);">
-                <label style="font-size:12px;opacity:.6;display:block;margin-bottom:6px;">
-                    Recherche rapide d'adhérent (filtre toutes les listes ci-dessous)
-                </label>
-                <input type="text" id="globalSearch" class="form-control"
-                       placeholder="Tapez un nom ou prénom..."
-                       style="max-width:400px;"
-                       oninput="filterAll(this.value)">
-            </div>
-
-            {# Grille des fonctions #}
+            {# Grille 3 colonnes : Direction | Secrétariat + Trésorerie | Administrateurs #}
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
 
-                {% set groupes = {
-                    'Direction' : ['president', 'vice_president'],
-                    'Secrétariat' : ['secretaire', 'secretaire_adjoint'],
-                    'Trésorerie' : ['tresorier', 'tresorier_adjoint'],
-                    'Administrateurs' : ['administrateur1', 'administrateur2', 'administrateur3']
-                } %}
-
-                {% for groupe, cols in groupes %}
-                <div class="card" style="padding:16px;">
-                    <div style="font-size:12px;font-weight:600;opacity:.5;text-transform:uppercase;
-                                letter-spacing:.06em;margin-bottom:12px;">{{ groupe }}</div>
-                    {% for col in cols %}
-                    <div class="form-group" style="margin-bottom:12px;">
-                        <label style="font-size:12px;">{{ fonctions[col] }}</label>
-                        <select name="{{ col }}" id="sel_{{ col }}" class="form-control fn-select"
-                                data-current="{{ entite[col] ?? '' }}"
-                                style="font-size:13px;">
-                            <option value="">— Non attribué —</option>
-                            {% for adht in adherents %}
-                                <option value="{{ adht.id_adht }}"
-                                    {{ (entite[col] ?? '') == adht.id_adht ? 'selected' : '' }}>
-                                    {{ adht.nom_adht }} {{ adht.prenom_adht }}
-                                    {% if adht.profession_adht %} · {{ adht.profession_adht }}{% endif %}
-                                    {% if mode == 'bureau' and adht.section is defined %} ({{ adht.section }}){% endif %}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                {# Colonne 1 : Direction #}
+                <div class="card">
+                    <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;
+                                letter-spacing:.06em;margin-bottom:14px;">Direction</div>
+                    {% for fn, label in {president:'Président',vice_president:'Vice-président'} %}
+                        {{ _self.selectFonction(fn, label, entite, adherents) }}
                     {% endfor %}
                 </div>
-                {% endfor %}
+
+                {# Colonne 2 : Secrétariat & Trésorerie #}
+                <div class="card">
+                    <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;
+                                letter-spacing:.06em;margin-bottom:14px;">Secrétariat & Trésorerie</div>
+                    {% for fn, label in {
+                        secretaire:'Secrétaire',
+                        secretaire_adjoint:'Secrétaire adjoint',
+                        tresorier:'Trésorier',
+                        tresorier_adjoint:'Trésorier adjoint'
+                    } %}
+                        {{ _self.selectFonction(fn, label, entite, adherents) }}
+                    {% endfor %}
+                </div>
+
+                {# Colonne 3 : Administrateurs #}
+                <div class="card">
+                    <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;
+                                letter-spacing:.06em;margin-bottom:14px;">Administrateurs</div>
+                    {% for fn, label in {
+                        administrateur1:'Administrateur 1',
+                        administrateur2:'Administrateur 2',
+                        administrateur3:'Administrateur 3'
+                    } %}
+                        {{ _self.selectFonction(fn, label, entite, adherents) }}
+                    {% endfor %}
+                </div>
 
             </div>
 
-            {# Aperçu en temps réel #}
-            <div class="card" style="margin-top:16px;" id="preview">
-                <div class="card-title" style="font-size:14px;">Aperçu de l'organigramme</div>
-                <div id="previewGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:13px;">
-                    {% for col, label in fonctions %}
-                    <div id="prev_{{ col }}" style="padding:8px;border-radius:5px;background:rgba(255,255,255,.04);">
-                        <div style="font-size:10px;opacity:.5;text-transform:uppercase;margin-bottom:3px;">{{ label }}</div>
-                        <div id="prev_{{ col }}_txt" style="font-weight:500;">
-                            {{ entite[col] is defined and entite[col] ? '...' : '—' }}
+            {# Aperçu temps réel #}
+            <div class="card" style="margin-top:16px;">
+                <div style="font-size:13px;font-weight:600;margin-bottom:12px;opacity:.7;">
+                    Aperçu de l'organigramme
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                    {% for fn, label in {
+                        president:'Président',
+                        vice_president:'Vice-président',
+                        secretaire:'Secrétaire',
+                        tresorier:'Trésorier',
+                        secretaire_adjoint:'Secr. adjoint',
+                        tresorier_adjoint:'Trés. adjoint',
+                        administrateur1:'Admin 1',
+                        administrateur2:'Admin 2',
+                        administrateur3:'Admin 3'
+                    } %}
+                    <div style="padding:8px;border-radius:5px;background:rgba(255,255,255,.04);">
+                        <div style="font-size:10px;opacity:.5;text-transform:uppercase;margin-bottom:3px;">
+                            {{ label }}
+                        </div>
+                        <div id="prev_{{ fn }}" style="font-size:12px;font-weight:500;
+                            color:{% if fn starts with 'administrateur' %}#90cdf4{% else %}#e2e8f0{% endif %};">
+                            —
                         </div>
                     </div>
                     {% endfor %}
@@ -124,48 +141,71 @@
             </div>
 
             <div style="display:flex;gap:10px;margin-top:20px;">
-                <button type="submit" class="btn btn-success">💾 Enregistrer l'organigramme</button>
+                <button type="submit" class="btn btn-success">💾 Enregistrer</button>
                 <a href="{{ back_url }}" class="btn btn-secondary">Annuler</a>
             </div>
-
         </form>
     </main>
 </div>
 
+{# Macro select avec NOM + id_adht + NIN #}
+{% macro selectFonction(fn, label, entite, adherents) %}
+<div class="form-group" style="margin-bottom:14px;">
+    <label style="font-size:12px;margin-bottom:4px;display:block;">{{ label }}</label>
+    <select name="{{ fn }}" id="sel_{{ fn }}" class="form-control fn-select"
+            style="font-size:12px;" onchange="updatePreview()">
+        <option value="">— Non attribué —</option>
+        {% for adht in adherents %}
+            <option value="{{ adht.id_adht }}"
+                {{ (entite[fn] ?? '') == adht.id_adht ? 'selected' : '' }}
+                data-display="{{ adht.nom_adht }} {{ adht.prenom_adht }}">
+                {{ adht.nom_adht }} {{ adht.prenom_adht }} — id:{{ adht.id_adht }} — NIN:{{ adht.NIN_adh ?? '—' }}
+            </option>
+        {% endfor %}
+    </select>
+</div>
+{% endmacro %}
+
 <style>
-    .btn-primary{background:#4299e1;color:#fff;}
-    option:checked{background:#1e3a5f;}
+    .form-control option { font-family: monospace; font-size: 12px; }
+    code { font-family:'Courier New',monospace;font-size:11px;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px; }
 </style>
 
 <script>
-// Noms des adhérents pour l'aperçu
-const NOMS = {};
-document.querySelectorAll('.fn-select').forEach(sel => {
-    sel.querySelectorAll('option').forEach(opt => {
-        if (opt.value) NOMS[opt.value] = opt.textContent.trim().split(' · ')[0];
-    });
-    sel.addEventListener('change', updatePreview);
-});
-
 function updatePreview() {
     document.querySelectorAll('.fn-select').forEach(sel => {
-        const col  = sel.name;
-        const val  = sel.value;
-        const txt  = document.getElementById('prev_' + col + '_txt');
-        if (txt) txt.textContent = val ? (NOMS[val] || '#' + val) : '—';
+        const fn  = sel.name;
+        const opt = sel.options[sel.selectedIndex];
+        const el  = document.getElementById('prev_' + fn);
+        if (!el) return;
+        if (sel.value) {
+            // Afficher seulement NOM Prénom dans l'aperçu
+            el.textContent = opt.dataset.display || opt.textContent.split('—')[0].trim();
+        } else {
+            el.textContent = '—';
+        }
     });
 }
-updatePreview();
 
-// Filtre global sur toutes les listes
 function filterAll(q) {
     q = q.toLowerCase();
     document.querySelectorAll('.fn-select').forEach(sel => {
-        sel.querySelectorAll('option').forEach(opt => {
-            if (!opt.value) return;
+        const current = sel.value;
+        Array.from(sel.options).forEach(opt => {
+            if (!opt.value) { opt.style.display = ''; return; }
             opt.style.display = opt.textContent.toLowerCase().includes(q) ? '' : 'none';
         });
+        // Si l'option sélectionnée est masquée, ne pas changer la sélection
+        sel.value = current;
     });
 }
+
+function clearSearch() {
+    document.getElementById('globalSearch').value = '';
+    filterAll('');
+}
+
+// Initialiser l'aperçu au chargement
+updatePreview();
 </script>
 {% endblock %}

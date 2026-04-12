@@ -154,7 +154,7 @@ class OrganigrammeController extends AbstractController
 
         // Tous les adhérents pour le bureau national
         $adherents = $this->connection->fetchAllAssociative(
-            'SELECT id_adht, nom_adht, prenom_adht, profession_adht, id_section
+            'SELECT id_adht, nom_adht, prenom_adht, profession_adht, NIN_adh, id_section
              FROM comitemaore_adherent
              ORDER BY nom_adht, prenom_adht'
         );
@@ -193,7 +193,7 @@ class OrganigrammeController extends AbstractController
         $idSection = $request->query->getInt('section', 0);
 
         $qb = $this->connection->createQueryBuilder()
-            ->select('id_adht, nom_adht, prenom_adht, profession_adht')
+            ->select('id_adht, nom_adht, prenom_adht, profession_adht, NIN_adh')
             ->from('comitemaore_adherent')
             ->where('nom_adht LIKE :q OR prenom_adht LIKE :q')
             ->setParameter('q', '%' . $q . '%')
@@ -264,7 +264,7 @@ class OrganigrammeController extends AbstractController
     private function adherentsDeLaSection(int $idSection): array
     {
         return $this->connection->fetchAllAssociative(
-            'SELECT id_adht, nom_adht, prenom_adht, profession_adht
+            'SELECT id_adht, nom_adht, prenom_adht, profession_adht, NIN_adh
              FROM comitemaore_adherent WHERE id_section = ?
              ORDER BY nom_adht, prenom_adht',
             [$idSection]
@@ -274,7 +274,7 @@ class OrganigrammeController extends AbstractController
     private function adherentsDeLaFederation(int $idFederation): array
     {
         return $this->connection->fetchAllAssociative(
-            'SELECT a.id_adht, a.nom_adht, a.prenom_adht, a.profession_adht, s.section
+            'SELECT a.id_adht, a.nom_adht, a.prenom_adht, a.profession_adht, a.NIN_adh, s.section
              FROM comitemaore_adherent a
              LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
              WHERE s.id_federation = ?

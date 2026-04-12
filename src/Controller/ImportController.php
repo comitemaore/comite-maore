@@ -14,18 +14,10 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route('/import')]
 class ImportController extends AbstractController
 {
-    // Fonctions valides communes aux 3 niveaux
     private const FONCTIONS = [
         'president', 'vice_president', 'secretaire', 'tresorier',
         'secretaire_adjoint', 'tresorier_adjoint',
         'administrateur1', 'administrateur2', 'administrateur3',
-    ];
-
-    // Colonnes CSV obligatoires selon le type
-    private const COLONNES_REQUISES = [
-        'bureau'      => ['fonction', 'prenom', 'nom', 'email'],
-        'federations' => ['federation', 'fonction', 'prenom', 'nom', 'email'],
-        'sections'    => ['section', 'fonction', 'prenom', 'nom', 'email'],
     ];
 
     public function __construct(
@@ -45,17 +37,16 @@ class ImportController extends AbstractController
     }
 
     // ------------------------------------------------------------------
-    // TRAITEMENT D'UN IMPORT CSV
+    // TRAITEMENT
     // ------------------------------------------------------------------
     #[Route('/process/{type}', name: 'app_import_process', methods: ['POST'])]
     public function process(string $type, Request $request): Response
     {
         if (!in_array($type, ['bureau', 'federations', 'sections'], true)) {
-            throw $this->createNotFoundException("Type d'import inconnu : $type");
+            throw $this->createNotFoundException();
         }
-
         if (!$this->isCsrfTokenValid('import_' . $type, $request->request->get('_token'))) {
-            throw $this->createAccessDeniedException('Token CSRF invalide.');
+            throw $this->createAccessDeniedException();
         }
 
         $file = $request->files->get('csv_file');
@@ -63,29 +54,25 @@ class ImportController extends AbstractController
             $this->addFlash('danger', 'Aucun fichier sélectionné.');
             return $this->redirectToRoute('app_import');
         }
-
-        if (!in_array($file->getClientOriginalExtension(), ['csv', 'CSV'], true)) {
+        if (!in_array(strtolower($file->getClientOriginalExtension()), ['csv'], true)) {
             $this->addFlash('danger', 'Seuls les fichiers .csv sont acceptés.');
             return $this->redirectToRoute('app_import');
         }
 
-        $mode = $request->request->get('mode', 'insert'); // insert | update | upsert
-
         try {
             $rapport = match ($type) {
-                'bureau'      => $this->importerBureau($file->getPathname(), $mode),
-                'federations' => $this->importerFederations($file->getPathname(), $mode),
-                'sections'    => $this->importerSections($file->getPathname(), $mode),
+                'bureau'      => $this->importerBureau($file->getPathname()),
+                'federations' => $this->importerFederations($file->getPathname()),
+                'sections'    => $this->importerSections($file->getPathname()),
             };
 
             $this->logService->log("import_csv_{$type}", 'succes', 'import', null, [
                 'fichier' => $file->getClientOriginalName(),
-                'mode'    => $mode,
-                'rapport' => $rapport['resume'],
+                'resume'  => $rapport['resume'],
             ], null, $this->getUser()?->getUserIdentifier());
 
         } catch (\Exception $e) {
-            $this->addFlash('danger', 'Erreur lors de l\'import : ' . $e->getMessage());
+            $this->addFlash('danger', 'Erreur : ' . $e->getMessage());
             return $this->redirectToRoute('app_import');
         }
 
@@ -93,21 +80,22 @@ class ImportController extends AbstractController
             'rapport' => $rapport,
             'type'    => $type,
             'fichier' => $file->getClientOriginalName(),
-            'mode'    => $mode,
         ]);
     }
 
     // ------------------------------------------------------------------
-    // IMPORT BUREAU EXÉCUTIF NATIONAL
+    // IMPORT BUREAU — 1 ligne avec toutes les colonnes fonctions
     // ------------------------------------------------------------------
-    private function importerBureau(string $filepath, string $mode): array
+    private function importerBureau(string $filepath): array
     {
         $lignes  = $this->parseCsv($filepath);
         $rapport = $this->initRapport();
 
-        $this->verifierColonnes($lignes, self::COLONNES_REQUISES['bureau']);
+        if (empty($lignes)) {
+            throw new \RuntimeException('Le fichier CSV est vide.');
+        }
 
-        // Récupérer ou créer le bureau de l'année courante
+        // Récupérer ou créer le bureau actif
         $bureau = $this->connection->fetchAssociative(
             'SELECT * FROM comitemaore_burexecnat WHERE actif = 1 ORDER BY annee_mandat DESC LIMIT 1'
         );
@@ -124,259 +112,179 @@ class ImportController extends AbstractController
 
         foreach ($lignes as $i => $ligne) {
             $numLigne = $i + 2;
-            $fonction = strtolower(trim($ligne['fonction'] ?? ''));
+            $maj      = [];
 
-            if (!in_array($fonction, self::FONCTIONS, true)) {
-                $rapport['erreurs'][] = "Ligne $numLigne : fonction « $fonction » invalide.";
-                $rapport['nb_erreurs']++;
-                continue;
+            foreach (self::FONCTIONS as $fn) {
+                $col   = $fn . '_id';
+                $idVal = isset($ligne[$col]) ? (int) trim($ligne[$col]) : 0;
+
+                if ($idVal <= 0) {
+                    $rapport['ignores'][] = "Ligne $numLigne : colonne $col vide ou absente — ignorée.";
+                    $rapport['nb_ignores']++;
+                    continue;
+                }
+
+                $err = $this->verifierAdherent($idVal, $numLigne, $fn);
+                if ($err) {
+                    $rapport['erreurs'][] = $err;
+                    $rapport['nb_erreurs']++;
+                    continue;
+                }
+
+                $maj[$fn] = $idVal;
+                $rapport['succes'][] = "Ligne $numLigne : $fn = id_adht $idVal";
+                $rapport['nb_succes']++;
             }
 
-            $idAdht = $this->upsertAdherent($ligne, null, $mode, $rapport, $numLigne);
-            if ($idAdht === null) continue;
-
-            // Mettre à jour la colonne de fonction dans comitemaore_burexecnat
-            $this->connection->update('comitemaore_burexecnat',
-                [$fonction => $idAdht],
-                ['id_burexec' => $idBureau]
-            );
-            $rapport['succes'][] = "Ligne $numLigne : {$ligne['prenom']} {$ligne['nom']} → bureau.$fonction";
-            $rapport['nb_succes']++;
+            if (!empty($maj)) {
+                $maj['modifie_par'] = $this->getUser()?->getUserIdentifier();
+                $this->connection->update('comitemaore_burexecnat', $maj, ['id_burexec' => $idBureau]);
+            }
         }
 
-        $rapport['resume'] = "Bureau : {$rapport['nb_succes']} importé(s), {$rapport['nb_erreurs']} erreur(s).";
+        $rapport['resume'] = "Bureau national : {$rapport['nb_succes']} fonction(s) mises à jour, {$rapport['nb_erreurs']} erreur(s).";
         return $rapport;
     }
 
     // ------------------------------------------------------------------
-    // IMPORT FÉDÉRATIONS
+    // IMPORT FÉDÉRATIONS — 1 ligne par fédération
     // ------------------------------------------------------------------
-    private function importerFederations(string $filepath, string $mode): array
+    private function importerFederations(string $filepath): array
     {
         $lignes  = $this->parseCsv($filepath);
         $rapport = $this->initRapport();
 
-        $this->verifierColonnes($lignes, self::COLONNES_REQUISES['federations']);
+        $this->verifierColonnesRequises($lignes, ['federation']);
 
         foreach ($lignes as $i => $ligne) {
-            $numLigne    = $i + 2;
-            $codeFed     = trim($ligne['federation'] ?? '');
-            $nomComplet  = trim($ligne['nom_complet'] ?? $codeFed);
-            $fonction    = strtolower(trim($ligne['fonction'] ?? ''));
+            $numLigne = $i + 2;
+            $codeFed  = trim($ligne['federation'] ?? '');
 
             if (empty($codeFed)) {
                 $rapport['erreurs'][] = "Ligne $numLigne : colonne 'federation' vide.";
                 $rapport['nb_erreurs']++;
                 continue;
             }
-            if (!in_array($fonction, self::FONCTIONS, true)) {
-                $rapport['erreurs'][] = "Ligne $numLigne : fonction « $fonction » invalide.";
+
+            $fed = $this->connection->fetchAssociative(
+                'SELECT id_federation FROM comitemaore_federations WHERE federation = ?', [$codeFed]
+            );
+            if (!$fed) {
+                $rapport['erreurs'][] = "Ligne $numLigne : fédération « $codeFed » introuvable dans comitemaore_federations.";
                 $rapport['nb_erreurs']++;
                 continue;
             }
+            $idFed = $fed['id_federation'];
+            $maj   = [];
 
-            // Trouver ou créer la fédération
-            $fed = $this->connection->fetchAssociative(
-                'SELECT * FROM comitemaore_federations WHERE federation = ?', [$codeFed]
-            );
-            if (!$fed) {
-                $this->connection->insert('comitemaore_federations', [
-                    'federation' => $codeFed,
-                    'nom_complet'=> $nomComplet ?: $codeFed,
-                ]);
-                $idFed = (int) $this->connection->lastInsertId();
-                $rapport['crees'][] = "Fédération « $codeFed » créée.";
-            } else {
-                $idFed = $fed['id_federation'];
-                if ($nomComplet && empty($fed['nom_complet'])) {
-                    $this->connection->update('comitemaore_federations',
-                        ['nom_complet' => $nomComplet], ['id_federation' => $idFed]);
+            foreach (self::FONCTIONS as $fn) {
+                $col   = $fn . '_id';
+                $idVal = isset($ligne[$col]) ? (int) trim($ligne[$col]) : 0;
+
+                if ($idVal <= 0) {
+                    $rapport['ignores'][] = "Ligne $numLigne ($codeFed) : colonne $col vide — ignorée.";
+                    $rapport['nb_ignores']++;
+                    continue;
                 }
+
+                $err = $this->verifierAdherent($idVal, $numLigne, "$codeFed.$fn");
+                if ($err) {
+                    $rapport['erreurs'][] = $err;
+                    $rapport['nb_erreurs']++;
+                    continue;
+                }
+
+                $maj[$fn] = $idVal;
+                $rapport['succes'][] = "Ligne $numLigne : $codeFed.$fn = id_adht $idVal";
+                $rapport['nb_succes']++;
             }
 
-            // Trouver la section de l'adhérent (optionnel dans le CSV fédérations)
-            $idSection = $this->trouverSection($ligne['section'] ?? null, $idFed);
-
-            $idAdht = $this->upsertAdherent($ligne, $idSection, $mode, $rapport, $numLigne);
-            if ($idAdht === null) continue;
-
-            $this->connection->update('comitemaore_federations',
-                [$fonction => $idAdht],
-                ['id_federation' => $idFed]
-            );
-            $rapport['succes'][] = "Ligne $numLigne : {$ligne['prenom']} {$ligne['nom']} → fed.$codeFed.$fonction";
-            $rapport['nb_succes']++;
+            if (!empty($maj)) {
+                $maj['modifie_par'] = $this->getUser()?->getUserIdentifier();
+                $this->connection->update('comitemaore_federations', $maj, ['id_federation' => $idFed]);
+            }
         }
 
-        $rapport['resume'] = "Fédérations : {$rapport['nb_succes']} importé(s), {$rapport['nb_erreurs']} erreur(s).";
+        $rapport['resume'] = "Fédérations : {$rapport['nb_succes']} fonction(s) mises à jour, {$rapport['nb_erreurs']} erreur(s).";
         return $rapport;
     }
 
     // ------------------------------------------------------------------
-    // IMPORT SECTIONS
+    // IMPORT SECTIONS — 1 ligne par section
     // ------------------------------------------------------------------
-    private function importerSections(string $filepath, string $mode): array
+    private function importerSections(string $filepath): array
     {
         $lignes  = $this->parseCsv($filepath);
         $rapport = $this->initRapport();
 
-        $this->verifierColonnes($lignes, self::COLONNES_REQUISES['sections']);
+        $this->verifierColonnesRequises($lignes, ['section']);
 
         foreach ($lignes as $i => $ligne) {
             $numLigne   = $i + 2;
             $nomSection = trim($ligne['section'] ?? '');
-            $codeFed    = trim($ligne['federation'] ?? '');
-            $fonction   = strtolower(trim($ligne['fonction'] ?? ''));
 
             if (empty($nomSection)) {
                 $rapport['erreurs'][] = "Ligne $numLigne : colonne 'section' vide.";
                 $rapport['nb_erreurs']++;
                 continue;
             }
-            if (!in_array($fonction, self::FONCTIONS, true)) {
-                $rapport['erreurs'][] = "Ligne $numLigne : fonction « $fonction » invalide.";
+
+            $sec = $this->connection->fetchAssociative(
+                'SELECT id_section FROM comitemaore_sections WHERE section = ?', [$nomSection]
+            );
+            if (!$sec) {
+                $rapport['erreurs'][] = "Ligne $numLigne : section « $nomSection » introuvable dans comitemaore_sections.";
                 $rapport['nb_erreurs']++;
                 continue;
             }
+            $idSection = $sec['id_section'];
+            $maj       = [];
 
-            // Résoudre la fédération
-            $idFederation = null;
-            if ($codeFed) {
-                $fed = $this->connection->fetchAssociative(
-                    'SELECT id_federation FROM comitemaore_federations WHERE federation = ?', [$codeFed]
-                );
-                $idFederation = $fed ? $fed['id_federation'] : null;
+            foreach (self::FONCTIONS as $fn) {
+                $col   = $fn . '_id';
+                $idVal = isset($ligne[$col]) ? (int) trim($ligne[$col]) : 0;
+
+                if ($idVal <= 0) {
+                    $rapport['ignores'][] = "Ligne $numLigne ($nomSection) : colonne $col vide — ignorée.";
+                    $rapport['nb_ignores']++;
+                    continue;
+                }
+
+                $err = $this->verifierAdherent($idVal, $numLigne, "$nomSection.$fn");
+                if ($err) {
+                    $rapport['erreurs'][] = $err;
+                    $rapport['nb_erreurs']++;
+                    continue;
+                }
+
+                $maj[$fn] = $idVal;
+                $rapport['succes'][] = "Ligne $numLigne : $nomSection.$fn = id_adht $idVal";
+                $rapport['nb_succes']++;
             }
 
-            // Trouver ou créer la section
-            $section = $this->connection->fetchAssociative(
-                'SELECT * FROM comitemaore_sections WHERE section = ?', [$nomSection]
-            );
-            if (!$section) {
-                $this->connection->insert('comitemaore_sections', [
-                    'section'      => $nomSection,
-                    'federation'   => $codeFed ?: '',
-                    'id_federation'=> $idFederation ?? 0,
-                ]);
-                $idSection = (int) $this->connection->lastInsertId();
-                $rapport['crees'][] = "Section « $nomSection » créée.";
-            } else {
-                $idSection = $section['id_section'];
+            if (!empty($maj)) {
+                $maj['modifie_par'] = $this->getUser()?->getUserIdentifier();
+                $this->connection->update('comitemaore_sections', $maj, ['id_section' => $idSection]);
             }
-
-            $idAdht = $this->upsertAdherent($ligne, $idSection, $mode, $rapport, $numLigne);
-            if ($idAdht === null) continue;
-
-            $this->connection->update('comitemaore_sections',
-                [$fonction => $idAdht],
-                ['id_section' => $idSection]
-            );
-            $rapport['succes'][] = "Ligne $numLigne : {$ligne['prenom']} {$ligne['nom']} → section.$nomSection.$fonction";
-            $rapport['nb_succes']++;
         }
 
-        $rapport['resume'] = "Sections : {$rapport['nb_succes']} importé(s), {$rapport['nb_erreurs']} erreur(s).";
+        $rapport['resume'] = "Sections : {$rapport['nb_succes']} fonction(s) mises à jour, {$rapport['nb_erreurs']} erreur(s).";
         return $rapport;
     }
 
     // ------------------------------------------------------------------
-    // Insérer ou mettre à jour un adhérent
-    // Retourne l'id_adht ou null en cas d'erreur
+    // Vérifier qu'un id_adht existe bien dans comitemaore_adherent
     // ------------------------------------------------------------------
-    private function upsertAdherent(array $ligne, ?int $idSection, string $mode, array &$rapport, int $numLigne): ?int
+    private function verifierAdherent(int $idAdht, int $numLigne, string $contexte): ?string
     {
-        $idAdht = (int) trim($ligne['id_adht'] ?? '0');
-        $email  = trim($ligne['email'] ?? '');
-        $prenom = trim($ligne['prenom'] ?? '');
-        $nom    = strtoupper(trim($ligne['nom'] ?? ''));
-
-        // --- PRIORITÉ 1 : id_adht fourni explicitement ---
-        if ($idAdht > 0) {
-            $existing = $this->connection->fetchAssociative(
-                'SELECT id_adht FROM comitemaore_adherent WHERE id_adht = ?', [$idAdht]
-            ) ?: null;
-
-            if (!$existing) {
-                $rapport['erreurs'][] = "Ligne $numLigne : id_adht=$idAdht introuvable dans comitemaore_adherent.";
-                $rapport['nb_erreurs']++;
-                return null;
-            }
-
-            // Mettre à jour les infos si fournies et si mode update/upsert
-            if ($mode !== 'insert' && ($prenom || $nom || $email)) {
-                $maj = array_filter([
-                    'prenom_adht'         => $prenom ?: null,
-                    'nom_adht'            => $nom ?: null,
-                    'email_adht'          => $email ?: null,
-                    'telephonep_adht'     => trim($ligne['telephone'] ?? '') ?: null,
-                    'profession_adht'     => trim($ligne['profession'] ?? '') ?: null,
-                    'id_section'          => $idSection,
-                    'datemodiffiche_adht' => (new \DateTime())->format('Y-m-d'),
-                ]);
-                if ($maj) {
-                    $this->connection->update('comitemaore_adherent', $maj, ['id_adht' => $idAdht]);
-                    $rapport['nb_maj']++;
-                }
-            } else {
-                $rapport['ignores'][] = "Ligne $numLigne : id_adht=$idAdht utilisé directement (mode insert, pas de mise à jour).";
-                $rapport['nb_ignores']++;
-            }
-
-            return $idAdht;
+        $adht = $this->connection->fetchAssociative(
+            'SELECT id_adht, nom_adht, prenom_adht, NIN_adh FROM comitemaore_adherent WHERE id_adht = ?',
+            [$idAdht]
+        );
+        if (!$adht) {
+            return "Ligne $numLigne ($contexte) : id_adht=$idAdht introuvable dans comitemaore_adherent.";
         }
-
-        // --- PRIORITÉ 2 : pas d'id_adht — recherche ou création ---
-        if (empty($prenom) || empty($nom)) {
-            $rapport['erreurs'][] = "Ligne $numLigne : id_adht manquant et prénom/nom insuffisants pour identifier l'adhérent.";
-            $rapport['nb_erreurs']++;
-            return null;
-        }
-
-        // Chercher l'adhérent existant par email ou par nom+prénom
-        $existing = null;
-        if ($email) {
-            $existing = $this->connection->fetchAssociative(
-                'SELECT id_adht FROM comitemaore_adherent WHERE email_adht = ?', [$email]
-            ) ?: null;
-        }
-        if (!$existing) {
-            $existing = $this->connection->fetchAssociative(
-                'SELECT id_adht FROM comitemaore_adherent WHERE nom_adht = ? AND prenom_adht = ?',
-                [$nom, $prenom]
-            ) ?: null;
-        }
-
-        $donnees = [
-            'prenom_adht'      => $prenom,
-            'nom_adht'         => $nom,
-            'email_adht'       => $email ?: null,
-            'telephonep_adht'  => trim($ligne['telephone'] ?? '') ?: null,
-            'profession_adht'  => trim($ligne['profession'] ?? '') ?: null,
-            'adresse_adht'     => trim($ligne['adresse'] ?? '') ?: null,
-            'ville_adht'       => trim($ligne['ville'] ?? '') ?: null,
-            'cp_adht'          => trim($ligne['cp'] ?? '') ?: null,
-            'id_section'       => $idSection,
-            'datemodiffiche_adht' => (new \DateTime())->format('Y-m-d'),
-        ];
-
-        if ($existing) {
-            if ($mode === 'insert') {
-                $rapport['ignores'][] = "Ligne $numLigne : $prenom $nom déjà existant (ignoré en mode insert).";
-                $rapport['nb_ignores']++;
-                return (int) $existing['id_adht'];
-            }
-            $this->connection->update('comitemaore_adherent', $donnees, ['id_adht' => $existing['id_adht']]);
-            $rapport['nb_maj']++;
-            return (int) $existing['id_adht'];
-        }
-
-        // Création
-        $donnees['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
-        $donnees['cotis_adht'] = 'Non';
-        $donnees['visibl_adht'] = 'Non';
-        $this->connection->insert('comitemaore_adherent', $donnees);
-        $rapport['nb_crees']++;
-        return (int) $this->connection->lastInsertId();
+        return null;
     }
 
     // ------------------------------------------------------------------
@@ -387,63 +295,39 @@ class ImportController extends AbstractController
         $handle = fopen($filepath, 'r');
         if (!$handle) throw new \RuntimeException('Impossible de lire le fichier CSV.');
 
-        // Détecter le séparateur (virgule ou point-virgule)
         $firstLine = fgets($handle);
         rewind($handle);
         $sep = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
 
-        // Lire l'en-tête
         $headers = fgetcsv($handle, 0, $sep);
-        if (!$headers) throw new \RuntimeException('Fichier CSV vide ou en-tête manquant.');
+        if (!$headers) throw new \RuntimeException('En-tête CSV manquant.');
 
-        // Nettoyer les en-têtes (BOM UTF-8, espaces)
         $headers = array_map(fn($h) => trim(str_replace("\xEF\xBB\xBF", '', $h)), $headers);
 
         $lignes = [];
         while (($row = fgetcsv($handle, 0, $sep)) !== false) {
-            if (count(array_filter($row)) === 0) continue; // Ligne vide
-            $ligne = array_combine($headers, array_pad($row, count($headers), ''));
-            $lignes[] = $ligne;
+            if (count(array_filter($row)) === 0) continue;
+            $lignes[] = array_combine($headers, array_pad($row, count($headers), ''));
         }
         fclose($handle);
-
         return $lignes;
     }
 
-    private function verifierColonnes(array $lignes, array $requises): void
+    private function verifierColonnesRequises(array $lignes, array $requises): void
     {
-        if (empty($lignes)) throw new \RuntimeException('Le fichier CSV est vide (aucune donnée après l\'en-tête).');
-        $colonnes = array_keys($lignes[0]);
-        $manquantes = array_diff($requises, $colonnes);
+        if (empty($lignes)) throw new \RuntimeException('Fichier CSV vide.');
+        $manquantes = array_diff($requises, array_keys($lignes[0]));
         if (!empty($manquantes)) {
-            throw new \RuntimeException(
-                'Colonnes manquantes dans le CSV : ' . implode(', ', $manquantes)
-                . '. Colonnes trouvées : ' . implode(', ', $colonnes)
-            );
+            throw new \RuntimeException('Colonnes manquantes : ' . implode(', ', $manquantes));
         }
-    }
-
-    private function trouverSection(?string $nomSection, int $idFederation): ?int
-    {
-        if (!$nomSection) return null;
-        $sec = $this->connection->fetchAssociative(
-            'SELECT id_section FROM comitemaore_sections WHERE section = ?', [trim($nomSection)]
-        );
-        return $sec ? (int) $sec['id_section'] : null;
     }
 
     private function initRapport(): array
     {
         return [
-            'nb_succes'  => 0,
-            'nb_erreurs' => 0,
-            'nb_crees'   => 0,
-            'nb_maj'     => 0,
-            'nb_ignores' => 0,
-            'succes'     => [],
-            'erreurs'    => [],
-            'ignores'    => [],
-            'crees'      => [],
+            'nb_succes'  => 0, 'nb_erreurs' => 0,
+            'nb_ignores' => 0, 'succes'     => [],
+            'erreurs'    => [], 'ignores'   => [],
             'resume'     => '',
         ];
     }
