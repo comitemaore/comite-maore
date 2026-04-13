@@ -135,89 +135,34 @@ class AdherentController extends AbstractController
                 $data['id_section'] = $adht['id_section'];
             }
 
-            // Vérification NIN unique avant toute opération
-            $nin = $data['NIN_adh'] ?? '';
-            if ($nin !== '') {
-                $existant = $this->connection->fetchAssociative(
-                    'SELECT id_adht, nom_adht, prenom_adht, NIN_adh FROM comitemaore_adherent WHERE NIN_adh = ?',
-                    [$nin]
-                );
-                if ($existant) {
-                    $error = sprintf(
-                        'Le NIN « %s » est déjà attribué à l'adhérent existant : '
-                        . '<strong>%s %s</strong> (id_adht : %d). '
-                        . 'Veuillez vérifier lequel des deux enregistrements est incorrect — '
-                        . 'celui que vous tentez d'ajouter, ou celui déjà présent en base '
-                        . '(<a href="%s" style="color:inherit;text-decoration:underline;">voir la fiche</a>).',
-                        htmlspecialchars($nin),
-                        htmlspecialchars($existant['prenom_adht']),
-                        htmlspecialchars($existant['nom_adht']),
-                        $existant['id_adht'],
-                        $this->generateUrl('app_adherent_show', ['id' => $existant['id_adht']])
-                    );
-                    // Réafficher le formulaire avec l'erreur et les données saisies
-                    $sections = $this->connection->fetchAllAssociative(
-                        'SELECT * FROM comitemaore_sections ORDER BY section'
-                    );
-                    return $this->render('adherent/form.html.twig', [
-                        'adherent'      => $data,
-                        'sections'      => $sections,
-                        'mode'          => 'nouveau',
-                        'is_admin'      => $this->isGranted('ROLE_ADMIN'),
-                        'current'       => $adht,
-                        'error'         => $error,
-                        'bypass_actif'  => $bypassActif,
-                        'statut_bypass' => $this->approbationService->statutBypass(),
-                    ]);
-                }
-            }
-
             // ---- BYPASS : exécution directe ----
             if ($bypassActif) {
-                try {
-                    $data['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
-                    $data['cotis_adht']             = 'Non';
-                    $data['visibl_adht']            = 'Non';
-                    $this->connection->insert('comitemaore_adherent', $data);
-                    $idAdht = (int) $this->connection->lastInsertId();
+                $data['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
+                $data['cotis_adht']             = 'Non';
+                $data['visibl_adht']            = 'Non';
+                $this->connection->insert('comitemaore_adherent', $data);
+                $idAdht = (int) $this->connection->lastInsertId();
 
-                    $statut = $this->approbationService->statutBypass();
-                    $this->log('ajout_adherent_direct', 'succes', $idAdht, [
-                        'bypass' => true,
-                        'sections_completes' => $statut['completes'],
-                    ]);
-                    $this->addFlash('success',
-                        "Adhérent ajouté directement (#$idAdht). "
-                        . "Mode bypass actif ({$statut['completes']}/20 sections configurées)."
-                    );
-                    return $this->redirectToRoute('app_adherent_show', ['id' => $idAdht]);
-
-                } catch (\Doctrine\DBAL\Exception\UniqueConstraintViolationException $e) {
-                    // Filet de sécurité si le NIN a été inséré entre la vérification et l'insert
-                    $existant = $this->connection->fetchAssociative(
-                        'SELECT id_adht, nom_adht, prenom_adht FROM comitemaore_adherent WHERE NIN_adh = ?',
-                        [$nin]
-                    );
-                    $lien = $existant
-                        ? sprintf(' Voir la fiche existante : <a href="%s" style="color:inherit;text-decoration:underline;">#%d %s %s</a>.',
-                            $this->generateUrl('app_adherent_show', ['id' => $existant['id_adht']]),
-                            $existant['id_adht'],
-                            htmlspecialchars($existant['prenom_adht']),
-                            htmlspecialchars($existant['nom_adht']))
-                        : '';
-                    $error = 'Ce NIN est déjà utilisé par un autre adhérent.' . $lien
-                           . ' Vérifiez lequel des deux enregistrements est incorrect.';
-                }
-            } else {
-                // ---- WORKFLOW NORMAL : demande d'approbation ----
-                $initiateur    = $this->currentAdherentOrFallback();
-                $idApprobation = $this->creerDemandeApprobation($initiateur, 'ajout', $data);
-                $this->log('demande_ajout_adherent', 'info', null, ['id_approbation' => $idApprobation]);
+                $statut = $this->approbationService->statutBypass();
+                $this->log('ajout_adherent_direct', 'succes', $idAdht, [
+                    'bypass' => true,
+                    'sections_completes' => $statut['completes'],
+                ]);
                 $this->addFlash('success',
-                    "Demande d'ajout créée (#$idApprobation). En attente d'approbations."
+                    "Adhérent ajouté directement (#$idAdht). "
+                    . "Mode bypass actif ({$statut['completes']}/20 sections configurées)."
                 );
-                return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
+                return $this->redirectToRoute('app_adherent_show', ['id' => $idAdht]);
             }
+
+            // ---- WORKFLOW NORMAL : demande d'approbation ----
+            $initiateur    = $this->currentAdherentOrFallback();
+            $idApprobation = $this->creerDemandeApprobation($initiateur, 'ajout', $data);
+            $this->log('demande_ajout_adherent', 'info', null, ['id_approbation' => $idApprobation]);
+            $this->addFlash('success',
+                "Demande d'ajout créée (#$idApprobation). En attente d'approbations."
+            );
+            return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
         }
 
         $sections = $this->connection->fetchAllAssociative(

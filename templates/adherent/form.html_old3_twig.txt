@@ -4,7 +4,7 @@
 {% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
 {% block navbar %}
 <nav class="navbar">
-  <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
   <div class="navbar-right">
     <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary btn-sm">← Retour</a>
     <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
@@ -61,20 +61,12 @@
       </p>
     {% endif %}
 
-    {% if error %}<div class="alert alert-danger">{{ error|raw }}</div>{% endif %}
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 
     <form method="post">
       <div class="card">
         <div class="card-title">Identité</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-          <div class="form-group" style="grid-column:span 3;">
-            <label>NIN <span style="font-size:11px;opacity:.6;">(Numéro d'Identification National — unique, obligatoire)</span></label>
-            <input type="text" name="NIN_adh" class="form-control" required
-                   placeholder="ex: COM1990123456"
-                   style="max-width:280px;font-family:monospace;letter-spacing:.05em;text-transform:uppercase;"
-                   oninput="this.value=this.value.toUpperCase()"
-                   value="{{ adherent.NIN_adh ?? '' }}">
-          </div>
           <div class="form-group">
             <label>Civilité</label>
             <select name="civilite_adht" class="form-control">
@@ -156,7 +148,7 @@
               <option value="">-- Choisir --</option>
               {% for s in sections %}
                 <option value="{{ s.id_section }}" {{ adherent.id_section ?? '' == s.id_section ? 'selected' : '' }}>
-                  {{ s.nom_section }}
+                  {{ s.section }}
                 </option>
               {% endfor %}
             </select>
