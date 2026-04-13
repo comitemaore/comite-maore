@@ -135,6 +135,23 @@ class AdherentController extends AbstractController
                 $data['id_section'] = $adht['id_section'];
             }
 
+            // Validation NIN obligatoire
+            if (empty($data['NIN_adh'])) {
+                $sections = $this->connection->fetchAllAssociative(
+                    'SELECT * FROM comitemaore_sections ORDER BY section'
+                );
+                return $this->render('adherent/form.html.twig', [
+                    'adherent'      => $data,
+                    'sections'      => $sections,
+                    'mode'          => 'nouveau',
+                    'is_admin'      => $this->isGranted('ROLE_ADMIN'),
+                    'current'       => $adht,
+                    "error"         => "Le NIN est obligatoire. Veuillez saisir le Numéro d'Identification National de l'adhérent.",
+                    'bypass_actif'  => $bypassActif,
+                    'statut_bypass' => $this->approbationService->statutBypass(),
+                ]);
+            }
+
             // Vérification NIN unique avant toute opération
             $nin = $data['NIN_adh'] ?? '';
             if ($nin !== '') {
