@@ -27,12 +27,8 @@ class AdherentController extends AbstractController
         $login = $this->getUser()?->getUserIdentifier();
         if (!$login) return null;
         return $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom
-             FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             WHERE a.login_adht = ?',
-    [$login]
-) ?: null;
+            'SELECT * FROM comitemaore_adherent WHERE login_adht = ?', [$login]
+        ) ?: null;
     }
 
     private function currentAdherentOrFallback(): array
@@ -76,9 +72,8 @@ class AdherentController extends AbstractController
         $isAdmin = $this->isGranted('ROLE_ADMIN');
 
         $qb = $this->connection->createQueryBuilder()
-            ->select('a.*', 's.section AS section_nom')
+            ->select('a.*')
             ->from('comitemaore_adherent', 'a')
-            ->leftJoin('a', 'comitemaore_sections', 's', 'a.id_section = s.id_section')
             ->orderBy('a.nom_adht', 'ASC');
 
         if (!$isAdmin && $adht && $adht['id_section']) {
@@ -111,10 +106,7 @@ class AdherentController extends AbstractController
     public function show(int $id): Response
     {
         $adherent = $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom
-             FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             WHERE a.id_adht = ?', [$id]
+            'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$id]
         );
         if (!$adherent) throw $this->createNotFoundException("Adhérent #$id introuvable.");
         $this->log('view_adherent', 'info', $id);
