@@ -1,0 +1,162 @@
+{# templates/adherent/show.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Fiche adhérent — Comité Maore{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">Comité Maore</a>
+
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">
+            {{ app.user.userIdentifier }}
+        </span>
+
+        {% if is_admin %}
+            <span class="badge badge-admin">ADMIN</span>
+        {% else %}
+            <span class="badge badge-user">USER</span>
+        {% endif %}
+
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
+        <a href="{{ path('app_search') }}">🔍 Recherche</a>
+
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h1 style="font-size:22px;font-weight:700;">
+                👤 Fiche adhérent
+            </h1>
+
+            <div>
+                <a href="{{ path('app_adherent_edit', {'id': adherent.id_adht}) }}"
+                   class="btn btn-warning btn-sm">
+                    ✏️ Modifier
+                </a>
+
+                <a href="{{ path('app_adherent_list') }}"
+                   class="btn btn-secondary btn-sm">
+                    ← Retour
+                </a>
+            </div>
+        </div>
+
+        <div class="card" style="padding:20px;">
+
+            <table class="table table-bordered">
+                <tbody>
+
+                    <tr>
+                        <th>ID</th>
+                        <td>{{ adherent.id_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th><strong>Section</strong></th>
+                        <td>{{ adherent.section_nom|default('Non définie') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Civilité</th>
+                        <td>{{ adherent.civilite_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Nom</th>
+                        <td>{{ adherent.nom_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Prénom</th>
+                        <td>{{ adherent.prenom_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Adresse</th>
+                        <td>{{ adherent.adresse_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Code postal</th>
+                        <td>{{ adherent.cp_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Ville</th>
+                        <td>{{ adherent.ville_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Téléphone</th>
+                        <td>{{ adherent.telephonep_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Email</th>
+                        <td>{{ adherent.email_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Date de naissance</th>
+                        <td>{{ adherent.datenaisance_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Date création fiche</th>
+                        <td>{{ adherent.datecreationfiche_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Profession</th>
+                        <td>{{ adherent.profession_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Disponibilité</th>
+                        <td>{{ adherent.disponib_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Infos complémentaires</th>
+                        <td>{{ adherent.autres_info_adht }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>NIN</th>
+                        <td>{{ adherent.NIN_adh }}</td>
+                    </tr>
+
+                    <tr>
+                        <th>Cotisation</th>
+                        <td>{{ adherent.cotis_adht }}</td>
+                    </tr>
+
+                </tbody>
+            </table>
+
+        </div>
+
+    </main>
+</div>
+{% endblock %}

@@ -1,24 +1,15 @@
 {# templates/adherent/show.html.twig #}
 {% extends 'base.html.twig' %}
-
-{% block title %}Fiche adhérent — Comité Maore{% endblock %}
+{% block title %}{{ adherent.prenom_adht }} {{ adherent.nom_adht }} — Comité Maoré{% endblock %}
 {% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}">Comité Maore</a>
-
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
     <div class="navbar-right">
-        <span style="font-size:13px;opacity:.8;">
-            {{ app.user.userIdentifier }}
-        </span>
-
-        {% if is_admin %}
-            <span class="badge badge-admin">ADMIN</span>
-        {% else %}
-            <span class="badge badge-user">USER</span>
-        {% endif %}
-
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
+        {% else %}<span class="badge badge-user">USER</span>{% endif %}
         <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
     </div>
 </nav>
@@ -26,137 +17,207 @@
 
 {% block body %}
 <div class="layout">
-
     <aside class="sidebar">
         <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
-        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_adherent_list') }}" class="active">👥 Adhérents</a>
         <a href="{{ path('app_approbation_list') }}">✅ Approbations</a>
         <a href="{{ path('app_search') }}">🔍 Recherche</a>
-
         {% if is_admin %}
             <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
             <a href="{{ path('app_log_list') }}">📋 Logs</a>
         {% endif %}
-
         <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
-
         <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
     </aside>
 
     <main class="main-content">
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <h1 style="font-size:22px;font-weight:700;">
-                👤 Fiche adhérent
-            </h1>
-
+        {# En-tête avec nom + badge fonctions #}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
             <div>
-                <a href="{{ path('app_adherent_edit', {'id': adherent.id_adht}) }}"
-                   class="btn btn-warning btn-sm">
-                    ✏️ Modifier
-                </a>
+                <h1 style="font-size:24px;font-weight:700;margin-bottom:4px;">
+                    {{ adherent.civilite_adht ? adherent.civilite_adht ~ ' ' : '' }}
+                    {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
+                </h1>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
 
-                <a href="{{ path('app_adherent_list') }}"
-                   class="btn btn-secondary btn-sm">
-                    ← Retour
-                </a>
+                    {# NIN #}
+                    <span style="font-family:monospace;font-size:13px;padding:3px 10px;
+                                 border-radius:5px;background:rgba(255,255,255,.08);">
+                        NIN : {{ adherent.NIN_adh ?? '—' }}
+                    </span>
+
+                    {# Fédération #}
+                    {% if contexte.federation %}
+                        <span style="font-size:12px;padding:3px 10px;border-radius:5px;
+                                     background:rgba(99,179,237,.15);color:#90cdf4;">
+                            🏘 {{ contexte.federation }}
+                        </span>
+                    {% endif %}
+
+                    {# Section #}
+                    {% if adherent.id_section %}
+                        <span style="font-size:12px;padding:3px 10px;border-radius:5px;
+                                     background:rgba(104,211,145,.12);color:#9ae6b4;">
+                            📍 Section #{{ adherent.id_section }}
+                        </span>
+                    {% endif %}
+                </div>
+
+                {# Fonctions #}
+                {% set toutes = (contexte.fonctions_ben ?? [])|merge(contexte.fonctions_fed ?? [])|merge(contexte.fonctions_section ?? []) %}
+                {% if toutes|length > 0 %}
+                <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+                    {% for fn in contexte.fonctions_ben ?? [] %}
+                        <span style="font-size:11px;padding:3px 10px;border-radius:12px;
+                                     background:rgba(239,159,39,.2);color:#fbd38d;border:1px solid rgba(239,159,39,.3);">
+                            🏛 BEN — {{ fn }}
+                        </span>
+                    {% endfor %}
+                    {% for fn in contexte.fonctions_fed ?? [] %}
+                        <span style="font-size:11px;padding:3px 10px;border-radius:12px;
+                                     background:rgba(99,179,237,.15);color:#90cdf4;border:1px solid rgba(99,179,237,.25);">
+                            🏘 Féd. — {{ fn }}
+                        </span>
+                    {% endfor %}
+                    {% for fn in contexte.fonctions_section ?? [] %}
+                        <span style="font-size:11px;padding:3px 10px;border-radius:12px;
+                                     background:rgba(104,211,145,.12);color:#9ae6b4;border:1px solid rgba(104,211,145,.25);">
+                            📍 Sec. — {{ fn }}
+                        </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="margin-top:8px;font-size:12px;opacity:.35;">_ Aucune fonction assignée</div>
+                {% endif %}
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <a href="{{ path('app_adherent_edit', {id: adherent.id_adht}) }}"
+                   class="btn btn-primary btn-sm">✏️ Modifier</a>
+                <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}"
+                   class="btn btn-sm" style="background:#d69e2e;color:#fff;">💰 Finances</a>
+                <a href="{{ path('app_document_list', {idAdht: adherent.id_adht}) }}"
+                   class="btn btn-sm" style="background:#553c9a;color:#fff;">📁 Documents</a>
+                <a href="{{ path('app_cv_show', {idAdht: adherent.id_adht}) }}"
+                   class="btn btn-sm" style="background:#2c7a7b;color:#fff;">📄 CV</a>
+                <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary btn-sm">← Liste</a>
             </div>
         </div>
 
-        <div class="card" style="padding:20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
 
-            <table class="table table-bordered">
-                <tbody>
+            {# Identité #}
+            <div class="card">
+                <div class="card-title">👤 Identité</div>
+                <table class="table">
+                    <tbody>
+                        <tr><td style="width:40%;opacity:.6;">NIN</td>
+                            <td><code style="font-family:monospace;">{{ adherent.NIN_adh ?? '—' }}</code></td></tr>
+                        <tr><td style="opacity:.6;">Civilité</td>
+                            <td>{{ adherent.civilite_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Prénom</td>
+                            <td><strong>{{ adherent.prenom_adht }}</strong></td></tr>
+                        <tr><td style="opacity:.6;">Nom</td>
+                            <td><strong>{{ adherent.nom_adht }}</strong></td></tr>
+                        <tr><td style="opacity:.6;">Date de naissance</td>
+                            <td>{{ adherent.datenaisance_adht ? adherent.datenaisance_adht|date('d/m/Y') : '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Profession</td>
+                            <td>{{ adherent.profession_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Promotion</td>
+                            <td>{{ adherent.promotion_adht ?: '—' }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
-                    <tr>
-                        <th>ID</th>
-                        <td>{{ adherent.id_adht }}</td>
-                    </tr>
+            {# Coordonnées #}
+            <div class="card">
+                <div class="card-title">📬 Coordonnées</div>
+                <table class="table">
+                    <tbody>
+                        <tr><td style="width:40%;opacity:.6;">Adresse</td>
+                            <td>{{ adherent.adresse_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">CP / Ville</td>
+                            <td>{{ adherent.cp_adht ?: '' }} {{ adherent.ville_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Tél. fixe</td>
+                            <td>{{ adherent.telephonef_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Tél. portable</td>
+                            <td>{{ adherent.telephonep_adht ?: '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Email</td>
+                            <td>{% if adherent.email_adht %}
+                                <a href="mailto:{{ adherent.email_adht }}" style="color:inherit;">{{ adherent.email_adht }}</a>
+                                {% else %}—{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
-                    <tr>
-                        <th><strong>Section</strong></th>
-                        <td>{{ adherent.section_nom|default('Non définie') }}</td>
-                    </tr>
-                    <tr>
-                        <th>Civilité</th>
-                        <td>{{ adherent.civilite_adht }}</td>
-                    </tr>
+            {# Appartenance organisationnelle #}
+            <div class="card">
+                <div class="card-title">🏛 Appartenance</div>
+                <table class="table">
+                    <tbody>
+                        <tr><td style="width:40%;opacity:.6;">Fédération</td>
+                            <td>{{ contexte.federation ?? '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Section (id)</td>
+                            <td>{{ adherent.id_section ?? '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Fonction(s) BEN</td>
+                            <td>{% if contexte.fonctions_ben|length > 0 %}
+                                {{ contexte.fonctions_ben|join(', ') }}
+                                {% else %}<span style="opacity:.35;">_</span>{% endif %}</td></tr>
+                        <tr><td style="opacity:.6;">Fonction(s) fédération</td>
+                            <td>{% if contexte.fonctions_fed|length > 0 %}
+                                {{ contexte.fonctions_fed|join(', ') }}
+                                {% else %}<span style="opacity:.35;">_</span>{% endif %}</td></tr>
+                        <tr><td style="opacity:.6;">Fonction(s) section</td>
+                            <td>{% if contexte.fonctions_section|length > 0 %}
+                                {{ contexte.fonctions_section|join(', ') }}
+                                {% else %}<span style="opacity:.35;">_</span>{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
-                    <tr>
-                        <th>Nom</th>
-                        <td>{{ adherent.nom_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Prénom</th>
-                        <td>{{ adherent.prenom_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Adresse</th>
-                        <td>{{ adherent.adresse_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Code postal</th>
-                        <td>{{ adherent.cp_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Ville</th>
-                        <td>{{ adherent.ville_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Téléphone</th>
-                        <td>{{ adherent.telephonep_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Email</th>
-                        <td>{{ adherent.email_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Date de naissance</th>
-                        <td>{{ adherent.datenaisance_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Date création fiche</th>
-                        <td>{{ adherent.datecreationfiche_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Profession</th>
-                        <td>{{ adherent.profession_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Disponibilité</th>
-                        <td>{{ adherent.disponib_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Infos complémentaires</th>
-                        <td>{{ adherent.autres_info_adht }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>NIN</th>
-                        <td>{{ adherent.NIN_adh }}</td>
-                    </tr>
-
-                    <tr>
-                        <th>Cotisation</th>
-                        <td>{{ adherent.cotis_adht }}</td>
-                    </tr>
-
-                </tbody>
-            </table>
+            {# Statut adhésion #}
+            <div class="card">
+                <div class="card-title">🏷 Statut adhésion</div>
+                <table class="table">
+                    <tbody>
+                        <tr><td style="width:40%;opacity:.6;">Cotisant</td>
+                            <td>{% if adherent.cotis_adht == 'Oui' %}
+                                <span class="badge" style="background:#276749;color:#9ae6b4;">✓ Oui</span>
+                                {% else %}<span class="badge" style="background:#742a2a;color:#fc8181;">✗ Non</span>{% endif %}</td></tr>
+                        <tr><td style="opacity:.6;">Échéance</td>
+                            <td>{{ adherent.date_echeance_cotis ? adherent.date_echeance_cotis|date('d/m/Y') : '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Visible annuaire</td>
+                            <td>{{ adherent.visibl_adht ?: 'Non' }}</td></tr>
+                        <tr><td style="opacity:.6;">Création fiche</td>
+                            <td>{{ adherent.datecreationfiche_adht ? adherent.datecreationfiche_adht|date('d/m/Y') : '—' }}</td></tr>
+                        <tr><td style="opacity:.6;">Dernière modif.</td>
+                            <td>{{ adherent.datemodiffiche_adht ? adherent.datemodiffiche_adht|date('d/m/Y') : '—' }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
         </div>
 
+        {% if is_admin %}
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08);">
+            <form method="post" action="{{ path('app_adherent_delete', {id: adherent.id_adht}) }}"
+                  onsubmit="return confirm('Supprimer {{ adherent.prenom_adht }} {{ adherent.nom_adht }} ?');">
+                <input type="hidden" name="_token"
+                       value="{{ csrf_token('delete_adherent_' ~ adherent.id_adht) }}">
+                <button type="submit" class="btn btn-danger btn-sm">🗑 Supprimer</button>
+                <span style="font-size:12px;opacity:.4;margin-left:8px;">
+                    Suppression directe ou via workflow selon la configuration
+                </span>
+            </form>
+        </div>
+        {% endif %}
+
     </main>
 </div>
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+    code { font-family:'Courier New',monospace;font-size:12px; }
+</style>
 {% endblock %}
