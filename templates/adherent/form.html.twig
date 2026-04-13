@@ -156,7 +156,7 @@
               <option value="">-- Choisir --</option>
               {% for s in sections %}
                 <option value="{{ s.id_section }}" {{ adherent.id_section ?? '' == s.id_section ? 'selected' : '' }}>
-                  {{ s.nom_section }}
+                  {{ s.section }}
                 </option>
               {% endfor %}
             </select>

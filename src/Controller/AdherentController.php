@@ -144,10 +144,10 @@ class AdherentController extends AbstractController
                 );
                 if ($existant) {
                     $error = sprintf(
-                        'Le NIN « %s » est déjà attribué à l'adhérent existant : '
+                        "Le NIN « %s » est déjà attribué à l'adhérent existant : "
                         . '<strong>%s %s</strong> (id_adht : %d). '
                         . 'Veuillez vérifier lequel des deux enregistrements est incorrect — '
-                        . 'celui que vous tentez d'ajouter, ou celui déjà présent en base '
+                        . "celui que vous tentez d'ajouter, ou celui déjà présent en base "
                         . '(<a href="%s" style="color:inherit;text-decoration:underline;">voir la fiche</a>).',
                         htmlspecialchars($nin),
                         htmlspecialchars($existant['prenom_adht']),
