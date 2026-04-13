@@ -72,7 +72,8 @@
             <td>{{ adh.civilite_adht }}</td>
             <td><strong>{{ adh.nom_adht }}</strong></td>
             <td>{{ adh.prenom_adht }}</td>
-            <td>{{ adh.id_section ?? '—' }}</td>
+            {# <td>{{ adh.id_section ?? '—' }}</td> #}
+            <td>{{ adh.section ?? '—' }}</td>
             <td>{{ adh.email_adht ?? '—' }}</td>
             <td>
               {% if adh.cotis_adht == 'Oui' %}

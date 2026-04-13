@@ -130,7 +130,7 @@ class AdherentController extends AbstractController
 
         if ($request->isMethod('POST')) {
             $data = $this->extractFormData($request);
-
+            // dump($data['NIN_adh'], $request->request->all());
             if (!$this->isGranted('ROLE_ADMIN') && $adht) {
                 $data['id_section'] = $adht['id_section'];
             }
@@ -325,6 +325,7 @@ class AdherentController extends AbstractController
     private function extractFormData(Request $request): array
     {
         return [
+            'NIN_adh'             => strtoupper(trim($request->request->get('NIN_adh', ''))),
             'civilite_adht'       => $request->request->get('civilite_adht', ''),
             'prenom_adht'         => $request->request->get('prenom_adht', ''),
             'nom_adht'            => $request->request->get('nom_adht', ''),

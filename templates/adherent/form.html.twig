@@ -73,7 +73,8 @@
                    placeholder="ex: COM1990123456"
                    style="max-width:280px;font-family:monospace;letter-spacing:.05em;text-transform:uppercase;"
                    oninput="this.value=this.value.toUpperCase()"
-                   value="{{ adherent.NIN_adh ?? '' }}">
+                   {# value="{{ adherent.NIN_adh ?? '' }}"> #}
+                   value="{{ adherent.NIN_adh|default('') }}"
           </div>
           <div class="form-group">
             <label>Civilité</label>
