@@ -337,6 +337,7 @@ class AdherentController extends AbstractController
     // ------------------------------------------------------------------
     private function extractFormData(Request $request): array
     {
+        //$idSection = $request->request->get('id_section');
         return [
             'NIN_adh'             => strtoupper(trim($request->request->get('NIN_adh', ''))),
             'civilite_adht'       => $request->request->get('civilite_adht', ''),
@@ -352,6 +353,7 @@ class AdherentController extends AbstractController
             'promotion_adht'      => $request->request->get('promotion_adht', ''),
             'datenaisance_adht'   => $request->request->get('datenaisance_adht', '') ?: null,
             'id_section'          => $request->request->getInt('id_section') ?: null,
+            //'id_section'          => is_numeric($idSection) ? (int) $idSection : null,
             'visibl_adht'         => $request->request->get('visibl_adht', 'Non'),
             'disponib_adht'       => $request->request->get('disponib_adht', ''),
             'autres_info_adht'    => $request->request->get('autres_info_adht', ''),
