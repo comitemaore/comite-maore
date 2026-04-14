@@ -363,7 +363,9 @@ class AdherentController extends AbstractController
     private function traiterPhotoUpload(Request $request, string $nin, int $idAdht): void
     {
         $file = $request->files->get('photo_identite');
-        if (!$file) return;
+        if (!$file || !$file->isValid()) {
+            return;
+        }
 
         $mime     = $file->getMimeType();
         $allowed  = ['image/jpeg', 'image/jpg', 'image/png'];
@@ -380,17 +382,25 @@ class AdherentController extends AbstractController
         }
 
         $filename = $nin . '.' . $ext;
+        $size = $file->getSize();
         $file->move($dir, $filename);
+        $fullPath = $dir . '/' . $filename;
+
+        // Fallback si jamais getSize() retourne null ou échoue
+        if (!$size && file_exists($fullPath)) {
+            $size = filesize($fullPath);
+        }
 
         // Enregistrer dans comitemaore_document
         $chemin = self::PHOTO_DIR . '/' . $filename;
         $login  = $this->getUser()?->getUserIdentifier();
 
         // Supprimer l'ancien enregistrement photo si existant
-        $this->connection->executeStatement(
-            "DELETE FROM comitemaore_document WHERE id_adht = ? AND type_doc = 'photo_identite'",
-            [$idAdht]
-        );
+        $this->connection->delete('comitemaore_document', [
+            'id_adht'  => $idAdht,
+            'type_doc' => 'photo_identite'
+        ]);
+
         $this->connection->insert('comitemaore_document', [
             'id_adht'        => $idAdht,
             'titre_doc'      => 'Photo d\'identité',
@@ -398,11 +408,12 @@ class AdherentController extends AbstractController
             'nom_fichier'    => $filename,
             'chemin_fichier' => $chemin,
             'mime_type'      => $mime,
-            'taille_fichier' => $file->getSize() ?: filesize($dir . '/' . $filename),
+            'taille_fichier' => $size,
             'description'    => 'Photo d\'identité — NIN ' . $nin,
             'date_upload'    => (new \DateTime())->format('Y-m-d H:i:s'),
             'uploade_par'    => $this->connection->fetchOne(
-                'SELECT id_adht FROM comitemaore_adherent WHERE login_adht = ?', [$login]
+                'SELECT id_adht FROM comitemaore_adherent WHERE login_adht = ?',
+                [$login]
             ) ?: null,
         ]);
     }
