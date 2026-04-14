@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
@@ -36,6 +36,7 @@
             <a href="{{ path('app_adherent_new') }}" class="btn btn-success">+ Nouvel adhérent</a>
         </div>
 
+        {# Indicateur bypass #}
         {% if bypass_actif ?? false %}
         <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;
                     background:#1c3a1a;border:1px solid #38a169;margin-bottom:16px;font-size:12px;color:#9ae6b4;">
@@ -46,8 +47,8 @@
         {% else %}
         <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:6px;
                     background:#1a2540;border:1px solid #4299e1;margin-bottom:16px;font-size:12px;color:#90cdf4;">
-            🔒 <strong>Workflow actif</strong> —
-            {{ statut_bypass.completes }}/20 sections configurées.
+            🔒 <strong>Workflow d'approbation actif</strong> —
+            {{ statut_bypass.completes }}/20 sections configurées. Tout ajout/suppression nécessite 3 validations.
         </div>
         {% endif %}
 
@@ -55,9 +56,9 @@
             <form method="get" style="display:flex;gap:10px;">
                 <input type="text" name="q" value="{{ search }}" class="form-control"
                        placeholder="Rechercher nom, prénom, email..." style="flex:1;">
-                <button type="submit" class="btn btn-primary">🔍</button>
+                <button type="submit" class="btn btn-primary">🔍 Chercher</button>
                 {% if search %}
-                    <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">✕</a>
+                    <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">✕ Reset</a>
                 {% endif %}
             </form>
         </div>
@@ -75,9 +76,9 @@
                             <th>Nom</th>
                             <th>Prénom</th>
                             <th>Fédération</th>
-                            <th>id_section</th>
                             <th>Section</th>
                             <th>Fonction(s)</th>
+                            <th>Email</th>
                             <th>Cotisant</th>
                             <th>Actions</th>
                         </tr>
@@ -87,25 +88,31 @@
                         {% set ctx = contextes[adh.id_adht] ?? {} %}
                         <tr>
                             <td style="font-size:11px;opacity:.5;">{{ adh.id_adht }}</td>
-                            <td style="font-family:monospace;font-size:11px;">{{ adh.NIN_adh ?? '—' }}</td>
+                            <td style="font-family:monospace;font-size:12px;">
+                                {{ adh.NIN_adh ?? '—' }}
+                            </td>
                             <td><strong>{{ adh.nom_adht }}</strong></td>
                             <td>{{ adh.prenom_adht }}</td>
-                            <td style="font-size:12px;">{{ adh.federation_nom ?? ctx.federation ?? '—' }}</td>
-                            <td style="font-size:12px;opacity:.6;">{{ adh.id_section ?? '—' }}</td>
-                            <td style="font-size:12px;">{{ adh.section_nom ?? '—' }}</td>
-                            <td style="font-size:11px;max-width:140px;">
-                                {% set fns = (ctx.fonctions_ben ?? [])|merge(ctx.fonctions_fed ?? [])|merge(ctx.fonctions_section ?? []) %}
-                                {% if fns|length > 0 %}
-                                    {% for fn in fns %}
-                                        <span style="display:inline-block;padding:1px 5px;border-radius:3px;margin:1px;
-                                                     background:rgba(255,255,255,.08);font-size:10px;white-space:nowrap;">
+                            <td style="font-size:12px;">
+                                {{ ctx.federation ?? '—' }}
+                            </td>
+                            <td style="font-size:12px;">
+                                {{ adh.id_section ?? '—' }}
+                            </td>
+                            <td style="font-size:11px;max-width:160px;">
+                                {% set toutes_fonctions = (ctx.fonctions_ben ?? [])|merge(ctx.fonctions_fed ?? [])|merge(ctx.fonctions_section ?? []) %}
+                                {% if toutes_fonctions|length > 0 %}
+                                    {% for fn in toutes_fonctions %}
+                                        <span style="display:inline-block;padding:1px 6px;border-radius:4px;margin:1px;
+                                            background:rgba(255,255,255,.08);font-size:10px;white-space:nowrap;">
                                             {{ fn }}
                                         </span>
                                     {% endfor %}
                                 {% else %}
-                                    <span style="opacity:.3;">_</span>
+                                    <span style="opacity:.35;">_</span>
                                 {% endif %}
                             </td>
+                            <td style="font-size:12px;">{{ adh.email_adht ?? '—' }}</td>
                             <td>
                                 {% if adh.cotis_adht == 'Oui' %}
                                     <span class="badge" style="background:#38a169;color:#fff;">Oui</span>
@@ -119,14 +126,14 @@
                                 <a href="{{ path('app_adherent_edit', {id: adh.id_adht}) }}"
                                    class="btn btn-primary btn-sm" title="Modifier">✏️</a>
                                 <a href="{{ path('app_finance_show', {idAdht: adh.id_adht}) }}"
-                                   class="btn btn-sm" style="background:#d69e2e;color:#fff;">💰</a>
+                                   class="btn btn-sm" style="background:#d69e2e;color:#fff;" title="Finances">💰</a>
                                 <a href="{{ path('app_document_list', {idAdht: adh.id_adht}) }}"
-                                   class="btn btn-sm" style="background:#553c9a;color:#fff;">📁</a>
+                                   class="btn btn-sm" style="background:#553c9a;color:#fff;" title="Documents">📁</a>
                                 <a href="{{ path('app_cv_show', {idAdht: adh.id_adht}) }}"
-                                   class="btn btn-sm" style="background:#2c7a7b;color:#fff;">📄</a>
+                                   class="btn btn-sm" style="background:#2c7a7b;color:#fff;" title="CV">📄</a>
                                 <form method="post"
                                       action="{{ path('app_adherent_delete', {id: adh.id_adht}) }}"
-                                      onsubmit="return confirm('Supprimer définitivement {{ adh.prenom_adht|e('js') }} {{ adh.nom_adht|e('js') }} (NIN: {{ adh.NIN_adh ?? '' }}) ?\n\nCette action est irréversible et supprimera toutes ses données liées.');"
+                                      onsubmit="return confirm('{{ bypass_actif ? 'Supprimer définitivement' : 'Soumettre une demande de suppression pour' }} {{ adh.prenom_adht }} {{ adh.nom_adht }} ?');"
                                       style="display:inline;">
                                     <input type="hidden" name="_token"
                                            value="{{ csrf_token('delete_adherent_' ~ adh.id_adht) }}">

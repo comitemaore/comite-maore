@@ -4,7 +4,7 @@
 {% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
 {% block navbar %}
 <nav class="navbar">
-  <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+  <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
   <div class="navbar-right">
     <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary btn-sm">← Retour</a>
     <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
@@ -63,18 +63,18 @@
 
     {% if error %}<div class="alert alert-danger">{{ error|raw }}</div>{% endif %}
 
-    <form method="post" enctype="multipart/form-data">
+    <form method="post">
       <div class="card">
         <div class="card-title">Identité</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
           <div class="form-group" style="grid-column:span 3;">
             <label>NIN <span style="font-size:11px;opacity:.6;">(Numéro d'Identification National — unique, obligatoire)</span></label>
             <input type="text" name="NIN_adh" class="form-control" required
-                   autocomplete="off"
                    placeholder="ex: COM1990123456"
                    style="max-width:280px;font-family:monospace;letter-spacing:.05em;text-transform:uppercase;"
                    oninput="this.value=this.value.toUpperCase()"
-                   value="{{ adherent.NIN_adh|default('') }}">
+                   {# value="{{ adherent.NIN_adh ?? '' }}"> #}
+                   value="{{ adherent.NIN_adh|default('') }}"
           </div>
           <div class="form-group">
             <label>Civilité</label>
@@ -156,7 +156,7 @@
             <select name="id_section" class="form-control" {{ not is_admin ? 'disabled' : '' }}>
               <option value="">-- Choisir --</option>
               {% for s in sections %}
-                <option value="{{ s.id_section }}" {{ (adherent.id_section ?? '') == s.id_section ? 'selected' : '' }}>
+                <option value="{{ s.id_section }}" {{ adherent.id_section ?? '' == s.id_section ? 'selected' : '' }}>
                   {{ s.section }}
                 </option>
               {% endfor %}
@@ -165,9 +165,8 @@
           <div class="form-group">
             <label>Cotisant</label>
             <select name="cotis_adht" class="form-control">
-              {% set cotis_val = adherent.cotis_adht is defined ? adherent.cotis_adht : 'Non' %}
-              <option value="Non" {{ cotis_val != 'Oui' ? 'selected' : '' }}>Non</option>
-              <option value="Oui" {{ cotis_val == 'Oui' ? 'selected' : '' }}>Oui</option>
+              <option value="Non" {{ (adherent.cotis_adht ?? 'Non') == 'Non' ? 'selected' : '' }}>Non</option>
+              <option value="Oui" {{ (adherent.cotis_adht ?? '') == 'Oui' ? 'selected' : '' }}>Oui</option>
             </select>
           </div>
           <div class="form-group">
@@ -193,25 +192,9 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">📷 Photo d'identité</div>
-        <p style="font-size:12px;opacity:.6;margin-bottom:12px;">
-          Le fichier sera renommé automatiquement en <code>NIN_adh.jpeg</code> ou <code>NIN_adh.png</code>
-          et stocké dans <code>var/photos/</code> (hors git, hors dossier public).
-        </p>
-        <div class="form-group">
-          <label>Fichier photo (JPG ou PNG)</label>
-          <input type="file" name="photo_identite" class="form-control"
-                 accept="image/jpeg,image/jpg,image/png">
-          <small style="font-size:11px;opacity:.5;margin-top:4px;display:block;">
-            Laisser vide pour conserver la photo existante.
-          </small>
-        </div>
-      </div>
-
       <div style="display:flex;gap:10px;">
         <button type="submit" class="btn btn-success">
-          {{ mode == 'nouveau' ? '📨 Soumettre' : '📨 Soumettre la modification' }}
+          {{ mode == 'nouveau' ? '📨 Soumettre la demande' : '📨 Soumettre la modification' }}
         </button>
         <a href="{{ path('app_adherent_list') }}" class="btn btn-secondary">Annuler</a>
       </div>

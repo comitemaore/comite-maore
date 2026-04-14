@@ -34,3 +34,8 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
         tags: ['controller.service_arguments']
+
+    App\Controller\AdherentController:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+        tags: ['controller.service_arguments']

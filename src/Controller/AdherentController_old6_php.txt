@@ -16,28 +16,19 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[Route('/adherent')]
 class AdherentController extends AbstractController
 {
-    // Répertoire photos hors racine publique et hors git (.gitignore)
-    private const PHOTO_DIR = 'var/photos';
-
     public function __construct(
-        private readonly Connection               $connection,
-        private readonly LogService              $logService,
-        private readonly ApprobationService      $approbationService,
+        private readonly Connection              $connection,
+        private readonly LogService             $logService,
+        private readonly ApprobationService     $approbationService,
         private readonly AdherentFonctionService $fonctionService,
-        private readonly string                  $projectDir,
     ) {}
 
-    // ------------------------------------------------------------------
     private function currentAdherent(): ?array
     {
         $login = $this->getUser()?->getUserIdentifier();
         if (!$login) return null;
         return $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom
-             FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             WHERE a.login_adht = ?',
-            [$login]
+            'SELECT * FROM comitemaore_adherent WHERE login_adht = ?', [$login]
         ) ?: null;
     }
 
@@ -46,10 +37,7 @@ class AdherentController extends AbstractController
         $adht = $this->currentAdherent();
         if ($adht !== null) return $adht;
         $first = $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom
-             FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             ORDER BY a.id_adht ASC LIMIT 1'
+            'SELECT * FROM comitemaore_adherent ORDER BY id_adht ASC LIMIT 1'
         );
         if ($first) {
             return array_merge($first, [
@@ -57,12 +45,11 @@ class AdherentController extends AbstractController
             ]);
         }
         return [
-            'id_adht'     => 0,
-            'login_adht'  => $this->getUser()?->getUserIdentifier() ?? 'unknown',
-            'id_section'  => null,
-            'section_nom' => null,
-            'prenom_adht' => '',
-            'nom_adht'    => '',
+            'id_adht'    => 0,
+            'login_adht' => $this->getUser()?->getUserIdentifier() ?? 'unknown',
+            'id_section' => null,
+            'prenom_adht'=> '',
+            'nom_adht'   => '',
         ];
     }
 
@@ -85,10 +72,8 @@ class AdherentController extends AbstractController
         $isAdmin = $this->isGranted('ROLE_ADMIN');
 
         $qb = $this->connection->createQueryBuilder()
-            ->select('a.*', 's.section AS section_nom', 'f.federation AS federation_nom')
+            ->select('a.*')
             ->from('comitemaore_adherent', 'a')
-            ->leftJoin('a', 'comitemaore_sections', 's', 'a.id_section = s.id_section')
-            ->leftJoin('s', 'comitemaore_federations', 'f', 's.id_federation = f.id_federation')
             ->orderBy('a.nom_adht', 'ASC');
 
         if (!$isAdmin && $adht && $adht['id_section']) {
@@ -101,7 +86,10 @@ class AdherentController extends AbstractController
         }
 
         $adherents = $qb->fetchAllAssociative();
+
+        // Résoudre fédération + fonctions pour toute la liste en une passe
         $contextes = $this->fonctionService->resoudreListe($adherents);
+
         $this->log('list_adherents', 'info', null, ['search' => $search]);
 
         return $this->render('adherent/list.html.twig', [
@@ -122,28 +110,16 @@ class AdherentController extends AbstractController
     public function show(int $id): Response
     {
         $adherent = $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom, f.federation AS federation_nom
-             FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             LEFT JOIN comitemaore_federations f ON s.id_federation = f.id_federation
-             WHERE a.id_adht = ?',
-            [$id]
+            'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$id]
         );
         if (!$adherent) throw $this->createNotFoundException("Adhérent #$id introuvable.");
 
-        $contexte = $this->fonctionService->resoudre(
-            $id, $adherent['id_section'] ? (int)$adherent['id_section'] : null
-        );
-
-        // Photo d'identité
-        $photoUrl = $this->trouverPhoto($adherent['NIN_adh'] ?? '');
-
+        $contexte = $this->fonctionService->resoudre($id, $adherent['id_section'] ? (int)$adherent['id_section'] : null);
         $this->log('view_adherent', 'info', $id);
 
         return $this->render('adherent/show.html.twig', [
             'adherent' => $adherent,
             'contexte' => $contexte,
-            'photoUrl' => $photoUrl,
             'is_admin' => $this->isGranted('ROLE_ADMIN'),
             'current'  => $this->currentAdherent(),
         ]);
@@ -158,7 +134,6 @@ class AdherentController extends AbstractController
         $adht        = $this->currentAdherent();
         $bypassActif = $this->approbationService->bypassActif();
         $error       = null;
-        $data        = [];
 
         if ($request->isMethod('POST')) {
             $data = $this->extractFormData($request);
@@ -167,59 +142,60 @@ class AdherentController extends AbstractController
                 $data['id_section'] = $adht['id_section'];
             }
 
-            // Validation NIN
+            // Validation NIN obligatoire
             if (empty($data['NIN_adh'])) {
-                $error = 'Le NIN est obligatoire.';
+                $error = 'Le NIN est obligatoire. Veuillez saisir le Numéro d\'Identification National.';
                 goto render_form_new;
             }
 
-            // NIN doublon
+            // Vérification NIN unique
             $existant = $this->connection->fetchAssociative(
                 'SELECT id_adht, nom_adht, prenom_adht FROM comitemaore_adherent WHERE NIN_adh = ?',
                 [$data['NIN_adh']]
             );
             if ($existant) {
-                $lien  = $this->generateUrl('app_adherent_show', ['id' => $existant['id_adht']]);
+                $lien = $this->generateUrl('app_adherent_show', ['id' => $existant['id_adht']]);
                 $error = sprintf(
-                    'Le NIN <strong>%s</strong> est déjà attribué à <strong>%s %s</strong> (id:%d). '
-                    . '<a href="%s" style="color:inherit;text-decoration:underline;">Voir la fiche</a>. '
-                    . 'Vérifiez lequel est incorrect.',
+                    'Le NIN <strong>%s</strong> est déjà attribué à : <strong>%s %s</strong> (id : %d). '
+                    . '<a href="%s" style="color:inherit;text-decoration:underline;">Voir la fiche existante</a>. '
+                    . 'Vérifiez lequel des deux enregistrements est incorrect.',
                     htmlspecialchars($data['NIN_adh']),
                     htmlspecialchars($existant['prenom_adht']),
                     htmlspecialchars($existant['nom_adht']),
-                    $existant['id_adht'], $lien
+                    $existant['id_adht'],
+                    $lien
                 );
                 goto render_form_new;
             }
 
+            // BYPASS — insertion directe
             if ($bypassActif) {
                 try {
                     $data['datecreationfiche_adht'] = (new \DateTime())->format('Y-m-d');
-                    $data['cotis_adht']             = $data['cotis_adht'] ?: 'Non';
-                    $data['visibl_adht']            = $data['visibl_adht'] ?: 'Non';
+                    $data['cotis_adht']             = 'Non';
+                    $data['visibl_adht']            = 'Non';
                     $this->connection->insert('comitemaore_adherent', $data);
                     $idAdht = (int) $this->connection->lastInsertId();
-
-                    // Upload photo
-                    $this->traiterPhotoUpload($request, $data['NIN_adh'], $idAdht);
-
                     $statut = $this->approbationService->statutBypass();
                     $this->log('ajout_adherent_direct', 'succes', $idAdht, [
                         'bypass' => true, 'sections_completes' => $statut['completes'],
                     ]);
-                    $this->addFlash('success', "Adhérent ajouté (#$idAdht) — mode bypass.");
+                    $this->addFlash('success',
+                        "Adhérent ajouté (#$idAdht). "
+                        . "Mode bypass ({$statut['completes']}/20 sections configurées)."
+                    );
                     return $this->redirectToRoute('app_adherent_show', ['id' => $idAdht]);
                 } catch (\Exception $e) {
-                    $error = 'Erreur : ' . $e->getMessage();
+                    $error = 'Erreur lors de l\'ajout : ' . $e->getMessage();
                     goto render_form_new;
                 }
             }
 
-            // Workflow
+            // WORKFLOW — demande d'approbation
             $initiateur    = $this->currentAdherentOrFallback();
             $idApprobation = $this->creerDemandeApprobation($initiateur, 'ajout', $data);
             $this->log('demande_ajout_adherent', 'info', null, ['id_approbation' => $idApprobation]);
-            $this->addFlash('success', "Demande d'ajout créée (#$idApprobation).");
+            $this->addFlash('success', "Demande d'ajout créée (#$idApprobation). En attente d'approbations.");
             return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
         }
 
@@ -228,7 +204,7 @@ class AdherentController extends AbstractController
             'SELECT * FROM comitemaore_sections ORDER BY section'
         );
         return $this->render('adherent/form.html.twig', [
-            'adherent'      => $data,
+            'adherent'      => $data ?? [],
             'sections'      => $sections,
             'mode'          => 'nouveau',
             'is_admin'      => $this->isGranted('ROLE_ADMIN'),
@@ -246,9 +222,7 @@ class AdherentController extends AbstractController
     public function edit(int $id, Request $request): Response
     {
         $adherent = $this->connection->fetchAssociative(
-            'SELECT a.*, s.section AS section_nom FROM comitemaore_adherent a
-             LEFT JOIN comitemaore_sections s ON a.id_section = s.id_section
-             WHERE a.id_adht = ?', [$id]
+            'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$id]
         );
         if (!$adherent) throw $this->createNotFoundException();
 
@@ -258,14 +232,8 @@ class AdherentController extends AbstractController
         if ($request->isMethod('POST')) {
             $data            = $this->extractFormData($request);
             $data['id_adht'] = $id;
-
-            // Upload photo si fournie
-            if (!empty($data['NIN_adh'])) {
-                $this->traiterPhotoUpload($request, $data['NIN_adh'], $id);
-            }
-
-            $initiateur    = $this->currentAdherentOrFallback();
-            $idApprobation = $this->creerDemandeApprobation($initiateur, 'modification', $data);
+            $initiateur      = $this->currentAdherentOrFallback();
+            $idApprobation   = $this->creerDemandeApprobation($initiateur, 'modification', $data);
             $this->log('demande_modif_adherent', 'info', $id, ['id_approbation' => $idApprobation]);
             $this->addFlash('success', "Demande de modification créée (#$idApprobation).");
             return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
@@ -287,7 +255,7 @@ class AdherentController extends AbstractController
     }
 
     // ------------------------------------------------------------------
-    // SUPPRIMER — bypass ou workflow + log dédié + nettoyage tables liées
+    // SUPPRIMER — bypass si < 20 sections complètes, sinon workflow
     // ------------------------------------------------------------------
     #[Route('/{id}/supprimer', name: 'app_adherent_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function delete(int $id, Request $request): Response
@@ -306,29 +274,25 @@ class AdherentController extends AbstractController
 
         $bypassActif = $this->approbationService->bypassActif();
 
+        // BYPASS — suppression directe
         if ($bypassActif) {
-            // Log dédié AVANT suppression (pour garder les infos)
-            $this->logSuppression($adherent);
-
-            // Nettoyage de toutes les tables liées
-            $this->nettoyerTablesLiees($id, $adherent['NIN_adh'] ?? '');
-
-            // Suppression de l'adhérent
             $this->connection->delete('comitemaore_adherent', ['id_adht' => $id]);
-
             $statut = $this->approbationService->statutBypass();
+            $this->log('suppression_adherent_directe', 'succes', $id, [
+                'bypass' => true, 'sections_completes' => $statut['completes'],
+            ]);
             $this->addFlash('success',
-                "Adhérent {$adherent['prenom_adht']} {$adherent['nom_adht']} supprimé "
-                . "— mode bypass ({$statut['completes']}/20 sections)."
+                "Adhérent #$id supprimé directement. "
+                . "Mode bypass ({$statut['completes']}/20 sections configurées)."
             );
             return $this->redirectToRoute('app_adherent_list');
         }
 
-        // Workflow
+        // WORKFLOW — demande d'approbation
         $initiateur    = $this->currentAdherentOrFallback();
         $idApprobation = $this->creerDemandeApprobation($initiateur, 'suppression', ['id_adht' => $id]);
         $this->log('demande_suppression_adherent', 'info', $id, ['id_approbation' => $idApprobation]);
-        $this->addFlash('warning', "Demande de suppression créée (#$idApprobation).");
+        $this->addFlash('warning', "Demande de suppression créée (#$idApprobation). En attente d'approbation.");
         return $this->redirectToRoute('app_approbation_show', ['id' => $idApprobation]);
     }
 
@@ -358,152 +322,6 @@ class AdherentController extends AbstractController
             'cotis_adht'          => $request->request->get('cotis_adht', 'Non'),
             'date_echeance_cotis' => $request->request->get('date_echeance_cotis', '') ?: null,
         ];
-    }
-
-    private function traiterPhotoUpload(Request $request, string $nin, int $idAdht): void
-    {
-        $file = $request->files->get('photo_identite');
-        if (!$file) return;
-
-        $mime     = $file->getMimeType();
-        $allowed  = ['image/jpeg', 'image/jpg', 'image/png'];
-        if (!in_array($mime, $allowed)) return;
-
-        $ext     = $mime === 'image/png' ? 'png' : 'jpeg';
-        $dir     = $this->projectDir . '/' . self::PHOTO_DIR;
-        if (!is_dir($dir)) mkdir($dir, 0750, true);
-
-        // Supprimer l'ancienne photo du même NIN si elle existe
-        foreach (['jpeg', 'jpg', 'png'] as $e) {
-            $old = $dir . '/' . $nin . '.' . $e;
-            if (file_exists($old)) unlink($old);
-        }
-
-        $filename = $nin . '.' . $ext;
-        $file->move($dir, $filename);
-
-        // Enregistrer dans comitemaore_document
-        $chemin = self::PHOTO_DIR . '/' . $filename;
-        $login  = $this->getUser()?->getUserIdentifier();
-
-        // Supprimer l'ancien enregistrement photo si existant
-        $this->connection->executeStatement(
-            "DELETE FROM comitemaore_document WHERE id_adht = ? AND type_doc = 'photo_identite'",
-            [$idAdht]
-        );
-        $this->connection->insert('comitemaore_document', [
-            'id_adht'        => $idAdht,
-            'titre_doc'      => 'Photo d\'identité',
-            'type_doc'       => 'photo_identite',
-            'nom_fichier'    => $filename,
-            'chemin_fichier' => $chemin,
-            'mime_type'      => $mime,
-            'taille_fichier' => $file->getSize() ?: filesize($dir . '/' . $filename),
-            'description'    => 'Photo d\'identité — NIN ' . $nin,
-            'date_upload'    => (new \DateTime())->format('Y-m-d H:i:s'),
-            'uploade_par'    => $this->connection->fetchOne(
-                'SELECT id_adht FROM comitemaore_adherent WHERE login_adht = ?', [$login]
-            ) ?: null,
-        ]);
-    }
-
-    private function trouverPhoto(string $nin): ?string
-    {
-        if (empty($nin)) return null;
-        foreach (['jpeg', 'jpg', 'png'] as $ext) {
-            $path = $this->projectDir . '/' . self::PHOTO_DIR . '/' . $nin . '.' . $ext;
-            if (file_exists($path)) {
-                // Servir via une route dédiée
-                return '/adherent/photo/' . urlencode($nin);
-            }
-        }
-        return null;
-    }
-
-    private function logSuppression(array $adherent): void
-    {
-        // Log dédié suppression sans les champs photo/document
-        $detail = $adherent;
-        unset($detail['password_adht']); // Ne pas logger le mot de passe
-        $login = $this->getUser()?->getUserIdentifier();
-        $this->logService->log(
-            'suppression_adherent',
-            'succes',
-            'adherent',
-            $adherent['id_adht'],
-            $detail,
-            null,
-            $login
-        );
-    }
-
-    private function nettoyerTablesLiees(int $idAdht, string $nin): void
-    {
-        // Supprimer les fichiers physiques des documents
-        $docs = $this->connection->fetchAllAssociative(
-            'SELECT chemin_fichier FROM comitemaore_document WHERE id_adht = ?', [$idAdht]
-        );
-        foreach ($docs as $doc) {
-            $path = $this->projectDir . '/public/' . $doc['chemin_fichier'];
-            if (file_exists($path)) unlink($path);
-        }
-
-        // Supprimer la photo d'identité
-        foreach (['jpeg', 'jpg', 'png'] as $ext) {
-            $path = $this->projectDir . '/' . self::PHOTO_DIR . '/' . $nin . '.' . $ext;
-            if (file_exists($path)) unlink($path);
-        }
-
-        // Supprimer les enregistrements liés dans les tables
-        $tables = [
-            'comitemaore_document'         => 'id_adht',
-            'comitemaore_cv'               => 'id_adht',
-            'finance_adh'                  => 'id_adht',
-            'comitemaore_cotisation_due'   => 'id_adht',
-            'comitemaore_log'              => 'id_adht',
-            'comitemaore_approbation_vote' => 'id_votant',
-        ];
-        foreach ($tables as $table => $col) {
-            try {
-                $this->connection->delete($table, [$col => $idAdht]);
-            } catch (\Exception) {}
-        }
-
-        // Nullifier les références dans l'organigramme
-        $fonctions = [
-            'president', 'vice_president', 'secretaire', 'tresorier',
-            'secretaire_adjoint', 'tresorier_adjoint',
-            'administrateur1', 'administrateur2', 'administrateur3',
-        ];
-        foreach ($fonctions as $fn) {
-            foreach (['comitemaore_sections', 'comitemaore_federations', 'comitemaore_burexecnat'] as $tbl) {
-                try {
-                    $this->connection->executeStatement(
-                        "UPDATE $tbl SET $fn = NULL WHERE $fn = ?", [$idAdht]
-                    );
-                } catch (\Exception) {}
-            }
-        }
-    }
-
-    // Route pour servir les photos (hors dossier public)
-    #[Route('/photo/{nin}', name: 'app_adherent_photo', methods: ['GET'])]
-    #[IsGranted('ROLE_USER')]
-    public function servirPhoto(string $nin): Response
-    {
-        $nin = preg_replace('/[^A-Z0-9]/', '', strtoupper($nin));
-        foreach (['jpeg', 'jpg', 'png'] as $ext) {
-            $path = $this->projectDir . '/' . self::PHOTO_DIR . '/' . $nin . '.' . $ext;
-            if (file_exists($path)) {
-                $mime = $ext === 'png' ? 'image/png' : 'image/jpeg';
-                return new Response(
-                    file_get_contents($path),
-                    200,
-                    ['Content-Type' => $mime, 'Cache-Control' => 'private, max-age=3600']
-                );
-            }
-        }
-        return new Response('', 404);
     }
 
     private function checkSectionAccess(array $adherent, ?array $currentUser): void

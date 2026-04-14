@@ -9,3 +9,6 @@
 /vendor/
 
 ###< symfony/framework-bundle ###
+
+# Photos d'identité — volumineuses, hors git
+/var/photos/
