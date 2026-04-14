@@ -382,6 +382,7 @@ class AdherentController extends AbstractController
             $old = $dir . '/' . $nin . '.' . $e;
             if (file_exists($old)) unlink($old);
         }
+        clearstatcache(true);
 
         $filename = $nin . '.' . $ext;
         $size = $file->getSize();
@@ -423,12 +424,18 @@ class AdherentController extends AbstractController
     private function trouverPhoto(string $nin): ?string
     {
         if (empty($nin)) return null;
+        $latest = null;
+
         foreach (['jpeg', 'jpg', 'png'] as $ext) {
             $path = $this->projectDir . '/' . self::PHOTO_DIR . '/' . $nin . '.' . $ext;
             if (file_exists($path)) {
-                // Servir via une route dédiée
-                return '/adherent/photo/' . urlencode($nin);
+                $latest = $path;
+                break;
             }
+        }
+
+        if ($latest) {
+            return '/adherent/photo/' . urlencode($nin) . '?v=' . filemtime($latest);
         }
         return null;
     }
@@ -512,7 +519,12 @@ class AdherentController extends AbstractController
                 return new Response(
                     file_get_contents($path),
                     200,
-                    ['Content-Type' => $mime, 'Cache-Control' => 'private, max-age=3600']
+                    [
+                    'Content-Type' => $mime,
+                    'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                    'Pragma' => 'no-cache',
+                    'Expires' => '0',
+                    ]
                 );
             }
         }

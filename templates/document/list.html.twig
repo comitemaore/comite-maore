@@ -111,11 +111,17 @@
                             <td style="font-size:12px;opacity:.7;">
                                 {{ doc.date_upload|date('d/m/Y H:i') }}
                             </td>
-                            <td style="display:flex;gap:6px;">
-                                <a href="/{{ doc.chemin_fichier }}" target="_blank"
-                                   class="btn btn-secondary btn-sm" title="Ouvrir">👁</a>
-                                <a href="/{{ doc.chemin_fichier }}" download="{{ doc.nom_fichier }}"
-                                   class="btn btn-secondary btn-sm" title="Télécharger">⬇</a>
+                            <td style="display:flex;gap:6px;">        
+                                {% set fileUrl = doc.type_doc == 'photo_identite'
+                                    ? path('app_adherent_photo', {nin: adherent.NIN_adh})
+                                    : asset(doc.chemin_fichier)
+                                %}
+                                <a href="{{ fileUrl }}" target="_blank" class="btn btn-secondary btn-sm">
+                                    👁
+                                </a>
+                                <a href="{{ fileUrl }}" download class="btn btn-secondary btn-sm">
+                                    ⬇
+                                </a>   
                                 <form method="post"
                                       action="{{ path('app_document_delete', {idDoc: doc.id_doc}) }}"
                                       onsubmit="return confirm('Supprimer ce document ?');">

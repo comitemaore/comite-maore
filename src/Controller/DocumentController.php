@@ -137,4 +137,19 @@ class DocumentController extends AbstractController
             'SELECT * FROM comitemaore_adherent WHERE login_adht = ?', [$login]
         ) ?: null) : null;
     }
+
+    private function getFileUrl(array $doc): string
+{
+    if ($doc['type_doc'] === 'photo_identite') {
+        // récupérer NIN via adhérent
+        $nin = $this->connection->fetchOne(
+            'SELECT NIN_adh FROM comitemaore_adherent WHERE id_adht = ?',
+            [$doc['id_adht']]
+        );
+
+        return '/adherent/photo/' . urlencode($nin);
+    }
+
+    return '/' . ltrim($doc['chemin_fichier'], '/');
+}
 }
