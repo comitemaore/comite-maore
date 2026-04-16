@@ -254,7 +254,6 @@ class AdherentController extends AbstractController
 
         $adht = $this->currentAdherent();
         $this->checkSectionAccess($adherent, $adht);
-        $bypassActif = $this->approbationService->bypassActif();
 
         if ($request->isMethod('POST')) {
             $data            = $this->extractFormData($request);
@@ -265,35 +264,6 @@ class AdherentController extends AbstractController
                 $this->traiterPhotoUpload($request, $data['NIN_adh'], $id);
             }
 
-            // =========================
-            // BYPASS ACTIF
-            // =========================
-            if ($bypassActif) {
-                try {
-                    $this->connection->update(
-                        'comitemaore_adherent',
-                        $data,
-                        ['id_adht' => $id]
-                    );
-
-                    $statut = $this->approbationService->statutBypass();
-
-                    $this->log('modification_adherent_direct', 'succes', $id, [
-                        'bypass' => true,
-                        'sections_completes' => $statut['completes'],
-                    ]);
-
-                    $this->addFlash('success', "Adhérent modifié (#$id) — mode bypass.");
-                    return $this->redirectToRoute('app_adherent_show', ['id' => $id]);
-
-                } catch (\Exception $e) {
-                    $this->addFlash('danger', 'Erreur : ' . $e->getMessage());
-                }
-            }
-
-            // =========================
-            // WORKFLOW NORMAL
-            // =========================
             $initiateur    = $this->currentAdherentOrFallback();
             $idApprobation = $this->creerDemandeApprobation($initiateur, 'modification', $data);
             $this->log('demande_modif_adherent', 'info', $id, ['id_approbation' => $idApprobation]);
@@ -311,7 +281,7 @@ class AdherentController extends AbstractController
             'is_admin'      => $this->isGranted('ROLE_ADMIN'),
             'current'       => $adht,
             'error'         => null,
-            'bypass_actif'  => $bypassActif,
+            'bypass_actif'  => false,
             'statut_bypass' => $this->approbationService->statutBypass(),
         ]);
     }
