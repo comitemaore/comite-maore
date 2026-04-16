@@ -43,7 +43,8 @@
                         {% for s in sections %}
                             <option value="{{ s.id_section }}"
                                 {{ (admin.id_section ?? '') == s.id_section ? 'selected' : '' }}>
-                                {{ s.section }}
+                                {# {{ (s.federation ?? '—') ~ '_' ~ s.section }} #}
+                                {{ s.section ~ '_' ~ (s.federation ?? '—') }}
                             </option>
                         {% endfor %}
                     </select>

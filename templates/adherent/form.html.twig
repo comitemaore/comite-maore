@@ -156,8 +156,11 @@
             <select name="id_section" class="form-control" {{ not is_admin ? 'disabled' : '' }}>
               <option value="">-- Choisir --</option>
               {% for s in sections %}
-                <option value="{{ s.id_section }}" {{ (adherent.id_section ?? '') == s.id_section ? 'selected' : '' }}>
-                  {{ s.section }}
+                <option value="{{ s.id_section }}"
+                  {# {{ adherent.id_section == s.id_section ? 'selected' : '' }} #} 
+                  {{ (adherent.id_section ?? null) == s.id_section ? 'selected' : '' }}> 
+                  {# {{ (s.federation ?? '—') ~ '_' ~ s.section }} #}
+                  {{ s.section ~ '_' ~ (s.federation ?? '—') }}
                 </option>
               {% endfor %}
             </select>

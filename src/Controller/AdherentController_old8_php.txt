@@ -225,10 +225,7 @@ class AdherentController extends AbstractController
 
         render_form_new:
         $sections = $this->connection->fetchAllAssociative(
-            'SELECT s.*, f.federation
-            FROM comitemaore_sections s
-            LEFT JOIN comitemaore_federations f ON s.id_federation = f.id_federation
-            ORDER BY f.federation, s.section'
+            'SELECT * FROM comitemaore_sections ORDER BY section'
         );
         return $this->render('adherent/form.html.twig', [
             'adherent'      => $data,
