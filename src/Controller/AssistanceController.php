@@ -17,8 +17,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 class AssistanceController extends AbstractController
 {
     // À adapter dans .env ou en paramètre Symfony
-    private const TECH_EMAIL  = 'admin.technique@comite-maore.org';
-    private const GITHUB_REPO = 'votre-organisation/comite-maore';
+    private const TECH_EMAIL  = 'mahamoud.jaffar@hotmail.com';
+    private const GITHUB_REPO = 'comitemaore/comite-maore';
     private const VPN_DIR     = 'var/vpn_configs';
 
     public function __construct(
