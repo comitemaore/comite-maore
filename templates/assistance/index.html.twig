@@ -1,0 +1,262 @@
+{# templates/assistance/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Assistance technique — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        <span class="badge badge-admin">ADMIN</span>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <a href="{{ path('app_assistance') }}" class="active">🆘 Assistance</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">🆘 Assistance technique</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:24px;">
+            Réservé aux administrateurs. Deux options : envoyer un ticket de dépannage par mail,
+            ou lancer une session de prise en main à distance via OpenVPN.
+        </p>
+
+        {% for msg in app.flashes('danger') %}<div class="alert alert-danger">{{ msg }}</div>{% endfor %}
+        {% for msg in app.flashes('success') %}<div class="alert alert-success">{{ msg }}</div>{% endfor %}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+            {# ====================================================== #}
+            {# BLOC 1 : TICKET DE DÉPANNAGE                           #}
+            {# ====================================================== #}
+            <div>
+                <div class="card" style="border:1px solid rgba(229,62,62,.35);">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+                        <span style="font-size:24px;">🎫</span>
+                        <div>
+                            <div class="card-title" style="margin:0;color:#fc8181;">Ticket de dépannage</div>
+                            <div style="font-size:12px;opacity:.5;">
+                                Envoie un mail à l'administrateur technique + génère un texte d'issue GitHub
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="post" action="{{ path('app_assistance_ticket') }}" id="ticketForm">
+                        <input type="hidden" name="_token" value="{{ csrf_token('assistance_ticket') }}">
+
+                        {# Type d'issue #}
+                        <div style="display:flex;gap:8px;margin-bottom:16px;margin-top:16px;">
+                            {% for val, label in {'bug':'🐛 Bug','support':'❓ Support','feature':'✨ Amélioration'} %}
+                            <label style="flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;
+                                          border-radius:6px;border:1px solid rgba(255,255,255,.15);cursor:pointer;font-size:13px;"
+                                   id="lbl_{{ val }}">
+                                <input type="radio" name="type" value="{{ val }}"
+                                       {{ loop.first ? 'checked' : '' }}
+                                       onchange="selectType('{{ val }}')">
+                                {{ label }}
+                            </label>
+                            {% endfor %}
+                        </div>
+
+                        {# Urgence #}
+                        <div class="form-group">
+                            <label style="font-size:12px;">Urgence</label>
+                            <select name="urgence" class="form-control">
+                                <option value="normal">🟡 Normal</option>
+                                <option value="important">🟠 Important</option>
+                                <option value="bloquant">🔴 Bloquant — Application inutilisable</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="font-size:12px;">Titre court *</label>
+                            <input type="text" name="titre" class="form-control" required
+                                   placeholder="ex: Impossible de se connecter, Erreur page adhérents...">
+                        </div>
+
+                        <div class="form-group">
+                            <label style="font-size:12px;">Module concerné</label>
+                            <select name="module" class="form-control">
+                                <option value="">-- Choisir --</option>
+                                {% for m in ['Connexion / Authentification','Gestion des adhérents','Organigramme',
+                                    'Finances','Documents / CV','Workflow d\'approbation','Import CSV',
+                                    'Administration BDD','Schéma BDD','Logs','Autre'] %}
+                                    <option>{{ m }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="font-size:12px;">Description du problème *</label>
+                            <textarea name="description" class="form-control" rows="3" required
+                                      placeholder="Décrivez le problème en détail..."></textarea>
+                        </div>
+
+                        {# Champs conditionnels Bug #}
+                        <div id="bug_fields">
+                            <div class="form-group">
+                                <label style="font-size:12px;">Étapes pour reproduire</label>
+                                <textarea name="reproduction" class="form-control" rows="3"
+                                          placeholder="1. Aller sur /adherent&#10;2. Cliquer sur...&#10;3. Erreur affichée"></textarea>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div class="form-group">
+                                    <label style="font-size:12px;">Comportement attendu</label>
+                                    <textarea name="attendu" class="form-control" rows="2"
+                                              placeholder="Ce qui devrait se passer..."></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-size:12px;">Comportement réel</label>
+                                    <textarea name="reel" class="form-control" rows="2"
+                                              placeholder="Ce qui se passe en réalité..."></textarea>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size:12px;">Message d'erreur exact</label>
+                                <textarea name="erreur" class="form-control" rows="2"
+                                          style="font-family:monospace;font-size:12px;"
+                                          placeholder="Copiez ici le message d'erreur si disponible..."></textarea>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-danger" style="width:100%;padding:12px;font-size:15px;"
+                                onclick="return confirm('Envoyer ce ticket à l\'administrateur technique ?');">
+                            🎫 Envoyer le ticket de dépannage
+                        </button>
+                    </form>
+                </div>
+
+                {# Lien direct GitHub #}
+                <div class="card" style="margin-top:12px;padding:14px 16px;">
+                    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">
+                        Ou créer une issue directement sur GitHub
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=bug_report.md"
+                           target="_blank" class="btn btn-secondary btn-sm">🐛 Bug report</a>
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=question_support.md"
+                           target="_blank" class="btn btn-secondary btn-sm">❓ Support</a>
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=feature_request.md"
+                           target="_blank" class="btn btn-secondary btn-sm">✨ Feature</a>
+                        <a href="https://github.com/{{ github_repo }}/issues"
+                           target="_blank" class="btn btn-secondary btn-sm">📋 Toutes les issues</a>
+                    </div>
+                </div>
+            </div>
+
+            {# ====================================================== #}
+            {# BLOC 2 : PRISE EN MAIN À DISTANCE (OpenVPN)            #}
+            {# ====================================================== #}
+            <div>
+                <div class="card" style="border:1px solid rgba(66,153,225,.35);">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+                        <span style="font-size:24px;">🖥</span>
+                        <div>
+                            <div class="card-title" style="margin:0;color:#90cdf4;">
+                                Prise en main à distance
+                            </div>
+                            <div style="font-size:12px;opacity:.5;">
+                                Importer un fichier de configuration OpenVPN fourni par le technicien
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="padding:12px;border-radius:8px;background:rgba(66,153,225,.08);
+                                border:1px solid rgba(66,153,225,.2);margin-bottom:16px;font-size:13px;">
+                        <strong style="color:#90cdf4;">Comment ça fonctionne :</strong><br>
+                        <ol style="margin:8px 0 0 16px;opacity:.8;line-height:1.8;">
+                            <li>Le technicien vous envoie un fichier <code>.ovpn</code> par mail</li>
+                            <li>Importez ce fichier ci-dessous</li>
+                            <li>Le serveur lancera la connexion OpenVPN</li>
+                            <li>Le technicien pourra accéder au serveur à distance</li>
+                        </ol>
+                    </div>
+
+                    <div style="padding:10px 14px;border-radius:6px;background:rgba(229,62,62,.1);
+                                border:1px solid rgba(229,62,62,.25);margin-bottom:16px;font-size:12px;color:#fc8181;">
+                        ⚠ <strong>Sécurité</strong> : n'importez que des fichiers .ovpn provenant
+                        du technicien officiel du Comité Maoré oo de Mahjatech. La connexion est tracée dans les logs.
+                    </div>
+
+                    <form method="post" action="{{ path('app_assistance_vpn_upload') }}"
+                          enctype="multipart/form-data">
+                        <input type="hidden" name="_token" value="{{ csrf_token('assistance_vpn') }}">
+
+                        <div class="form-group">
+                            <label>Fichier de configuration OpenVPN *</label>
+                            <input type="file" name="vpn_config" class="form-control"
+                                   accept=".ovpn,.conf" required>
+                            <small style="font-size:11px;opacity:.5;margin-top:4px;display:block;">
+                                Formats acceptés : .ovpn, .conf — Fichier fourni par votre technicien
+                            </small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="width:100%;padding:12px;font-size:15px;"
+                                onclick="return confirm('Lancer la session de prise en main à distance ?\n\nLe technicien pourra accéder au serveur. Cette action est tracée.');">
+                            🔌 Lancer la session OpenVPN
+                        </button>
+                    </form>
+                </div>
+
+                {# Infos système pour le technicien #}
+                <div class="card" style="margin-top:12px;padding:14px 16px;">
+                    <div style="font-size:12px;font-weight:600;margin-bottom:8px;opacity:.7;">
+                        Informations système (à communiquer au technicien)
+                    </div>
+                    <table style="width:100%;font-size:12px;">
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;width:40%;">Serveur PHP</td>
+                            <td>{{ constant('PHP_VERSION') }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Environnement</td>
+                            <td>{{ app.environment }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Utilisateur connecté</td>
+                            <td>{{ app.user.userIdentifier }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Date/heure serveur</td>
+                            <td>{{ "now"|date("d/m/Y H:i:s") }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<style>
+    code { font-family:'Courier New',monospace;font-size:11px;background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px; }
+    .btn-primary { background:#4299e1;color:#fff; }
+    .btn-primary:hover { background:#3182ce; }
+</style>
+
+<script>
+function selectType(type) {
+    const bugFields = document.getElementById('bug_fields');
+    bugFields.style.display = type === 'feature' ? 'none' : 'block';
+    ['bug','support','feature'].forEach(t => {
+        document.getElementById('lbl_' + t).style.background =
+            t === type ? 'rgba(255,255,255,.08)' : 'transparent';
+        document.getElementById('lbl_' + t).style.borderColor =
+            t === type ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.15)';
+    });
+}
+selectType('bug');
+</script>
+{% endblock %}

@@ -1,0 +1,109 @@
+{# templates/assistance/ticket_envoye.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Ticket envoyé — Comité Maoré{% endblock %}
+{% block body_theme %}dark{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <div class="navbar-right">
+        <a href="{{ path('app_assistance') }}" class="btn btn-secondary btn-sm">← Assistance</a>
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_assistance') }}" class="active">🆘 Assistance</a>
+        <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:20px;">🎫 Ticket de dépannage</h1>
+
+        {# Statut envoi mail #}
+        {% if mail_envoye %}
+            <div class="alert alert-success">
+                ✅ Mail envoyé avec succès à l'administrateur technique.
+            </div>
+        {% else %}
+            <div class="alert alert-danger">
+                ⚠ Impossible d'envoyer le mail ({{ mail_erreur }}).
+                Utilisez le texte ci-dessous pour créer une issue GitHub manuellement.
+            </div>
+        {% endif %}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+            {# Résumé du ticket #}
+            <div class="card">
+                <div class="card-title">📋 Récapitulatif</div>
+                <table class="table">
+                    <tbody>
+                        <tr><td style="opacity:.6;width:40%;">Type</td><td>{{ type_label }}</td></tr>
+                        <tr><td style="opacity:.6;">Urgence</td><td>{{ urgence_label }}</td></tr>
+                        <tr><td style="opacity:.6;">Titre</td><td><strong>{{ titre }}</strong></td></tr>
+                    </tbody>
+                </table>
+                <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="{{ path('app_assistance') }}" class="btn btn-secondary btn-sm">
+                        + Nouveau ticket
+                    </a>
+                    <a href="{{ path('app_dashboard') }}" class="btn btn-secondary btn-sm">
+                        Tableau de bord
+                    </a>
+                </div>
+            </div>
+
+            {# Créer issue GitHub #}
+            <div class="card" style="border:1px solid rgba(99,179,237,.3);">
+                <div class="card-title" style="color:#90cdf4;">
+                    Créer une issue GitHub
+                </div>
+                <p style="font-size:13px;opacity:.6;margin-bottom:12px;">
+                    Copiez le texte ci-dessous et collez-le dans une nouvelle issue GitHub,
+                    ou cliquez sur le bouton pour ouvrir GitHub directement.
+                </p>
+                <a href="{{ github_new }}" target="_blank"
+                   class="btn btn-sm" style="background:#24292e;color:#fff;margin-bottom:12px;">
+                    Ouvrir GitHub Issues →
+                </a>
+            </div>
+        </div>
+
+        {# Texte Markdown de l'issue #}
+        <div class="card" style="margin-top:4px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div class="card-title" style="margin:0;">📝 Texte pour l'issue GitHub (Markdown)</div>
+                <button type="button" onclick="copyIssue()" class="btn btn-secondary btn-sm"
+                        id="copyBtn">📋 Copier</button>
+            </div>
+            <pre id="issueText" style="background:rgba(255,255,255,.04);padding:16px;border-radius:6px;
+                 font-size:12px;font-family:monospace;white-space:pre-wrap;overflow-x:auto;
+                 border:1px solid rgba(255,255,255,.1);max-height:400px;overflow-y:auto;">{{ issue_markdown }}</pre>
+        </div>
+    </main>
+</div>
+
+<script>
+function copyIssue() {
+    const text = document.getElementById('issueText').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '✅ Copié !';
+        btn.style.background = '#276749';
+        btn.style.color = '#9ae6b4';
+        setTimeout(() => {
+            btn.textContent = '📋 Copier';
+            btn.style.background = '';
+            btn.style.color = '';
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

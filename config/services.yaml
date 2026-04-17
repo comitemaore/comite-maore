@@ -39,3 +39,8 @@ services:
         arguments:
             $projectDir: '%kernel.project_dir%'
         tags: ['controller.service_arguments']
+
+    App\Controller\AssistanceController:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+        tags: ['controller.service_arguments']
