@@ -1,0 +1,360 @@
+<?php
+
+namespace App\Controller;
+
+use App\Service\LogService;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+
+#[IsGranted('ROLE_ADMIN')]
+#[Route('/assistance')]
+class AssistanceController extends AbstractController
+{
+    private const TECH_EMAIL    = 'admin.technique@comite-maore.org';
+    private const GITHUB_REPO   = 'votre-organisation/comite-maore';
+    private const VPN_DIR       = 'var/vpn_configs';
+    private const SCRIPT_START  = '/usr/local/bin/comitemaore_start_vpn.sh';
+    private const SCRIPT_STOP   = '/usr/local/bin/comitemaore_stop_vpn.sh';
+    private const SCRIPT_STATUS = '/usr/local/bin/comitemaore_status_vpn.sh';
+
+    public function __construct(
+        private readonly LogService      $logService,
+        private readonly MailerInterface $mailer,
+        private readonly string          $projectDir,
+    ) {}
+
+    // ------------------------------------------------------------------
+    // PAGE PRINCIPALE
+    // ------------------------------------------------------------------
+    #[Route('', name: 'app_assistance')]
+    public function index(): Response
+    {
+        $vpnDir   = $this->projectDir . '/' . self::VPN_DIR;
+        $vpnFiles = [];
+
+        if (is_dir($vpnDir)) {
+            foreach (glob($vpnDir . '/vpn_*.ovpn') as $f) {
+                $vpnFiles[] = [
+                    'nom'      => basename($f),
+                    'path'     => $f,
+                    'taille'   => round(filesize($f) / 1024, 1) . ' Ko',
+                    'date'     => date('d/m/Y H:i', filemtime($f)),
+                ];
+            }
+        }
+
+        return $this->render('assistance/index.html.twig', [
+            'github_repo'     => self::GITHUB_REPO,
+            'vpn_files'       => $vpnFiles,
+            'vpn_statut'      => $this->vpnStatutData(),
+            'scripts_ok'      => file_exists(self::SCRIPT_START),
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // UPLOAD .ovpn
+    // ------------------------------------------------------------------
+    #[Route('/assistance/vpn/upload', name: 'app_assistance_vpn_upload', methods: ['POST'])]
+    public function vpnUpload(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('assistance_vpn', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $file = $request->files->get('vpn_config');
+        if (!$file || strtolower($file->getClientOriginalExtension()) !== 'ovpn') {
+            $this->addFlash('danger', 'Fichier invalide. Seuls les fichiers .ovpn sont acceptés.');
+            return $this->redirectToRoute('app_assistance');
+        }
+
+        $dir = $this->projectDir . '/' . self::VPN_DIR;
+        if (!is_dir($dir)) mkdir($dir, 0750, true);
+
+        // Un seul fichier à la fois — supprimer les anciens
+        foreach (glob($dir . '/vpn_*.ovpn') as $old) {
+            unlink($old);
+        }
+
+        $login    = $this->getUser()?->getUserIdentifier() ?? 'admin';
+        $slug     = preg_replace('/[^a-zA-Z0-9_-]/', '_', $login);
+        $filename = 'vpn_' . $slug . '_' . date('Ymd_His') . '.ovpn';
+        $file->move($dir, $filename);
+
+        $this->logService->log('vpn_upload', 'succes', 'assistance', null,
+            ['fichier' => $filename], null, $login);
+
+        $this->addFlash('success', "Profil « $filename » importé et prêt. Cliquez sur « Lancer la connexion ».");
+        return $this->redirectToRoute('app_assistance');
+    }
+
+    // ------------------------------------------------------------------
+    // LANCER LA CONNEXION VPN
+    // ------------------------------------------------------------------
+    #[Route('/vpn/lancer', name: 'app_assistance_vpn_lancer', methods: ['POST'])]
+    public function vpnLancer(Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('vpn_lancer', $request->request->get('_token'))) {
+            return new JsonResponse(['ok' => false, 'message' => 'Token CSRF invalide.'], 403);
+        }
+
+        $filename = basename($request->request->get('filename', ''));
+        $filepath = $this->projectDir . '/' . self::VPN_DIR . '/' . $filename;
+
+        if (!preg_match('/^vpn_[a-zA-Z0-9_-]+\.ovpn$/', $filename) || !file_exists($filepath)) {
+            return new JsonResponse(['ok' => false, 'message' => 'Fichier invalide ou introuvable.']);
+        }
+
+        if (!file_exists(self::SCRIPT_START)) {
+            return new JsonResponse([
+                'ok'      => false,
+                'message' => 'Scripts VPN non installés sur le serveur. Consultez scripts/INSTALL.md.',
+            ]);
+        }
+
+        // Le script se charge du sed et du lancement
+        $cmd    = 'sudo ' . escapeshellarg(self::SCRIPT_START)
+                . ' ' . escapeshellarg($filepath) . ' 2>&1';
+        $output = trim(shell_exec($cmd) ?? '');
+        $ok     = str_starts_with($output, 'OK:');
+        $login  = $this->getUser()?->getUserIdentifier() ?? 'admin';
+
+        $this->logService->log('vpn_lancer', $ok ? 'succes' : 'echec', 'assistance', null,
+            ['fichier' => $filename, 'output' => $output], null, $login);
+
+        return new JsonResponse([
+            'ok'      => $ok,
+            'message' => $ok
+                ? "Connexion VPN établie avec le profil « $filename »."
+                : "Erreur lors du lancement : $output",
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // ARRÊTER LA CONNEXION VPN + SUPPRIMER LE FICHIER
+    // ------------------------------------------------------------------
+    #[Route('/vpn/arreter', name: 'app_assistance_vpn_arreter', methods: ['POST'])]
+    public function vpnArreter(Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('vpn_arreter', $request->request->get('_token'))) {
+            return new JsonResponse(['ok' => false, 'message' => 'Token CSRF invalide.'], 403);
+        }
+
+        $filename = basename($request->request->get('filename', ''));
+        $filepath = $filename
+            ? $this->projectDir . '/' . self::VPN_DIR . '/' . $filename
+            : null;
+
+        if (!file_exists(self::SCRIPT_STOP)) {
+            return new JsonResponse(['ok' => false, 'message' => 'Script stop non installé.']);
+        }
+
+        $cmd = 'sudo ' . escapeshellarg(self::SCRIPT_STOP) . ' 2>&1';
+        $output = trim(shell_exec($cmd) ?? '');
+
+        $login = $this->getUser()?->getUserIdentifier() ?? 'admin';
+
+        $vpnStopped = str_starts_with($output, 'STOPPED');
+
+        // 👉 suppression contrôlée par Symfony (CE QUE TU VEUX)
+        $fileDeleted = false;
+        if ($vpnStopped && $filepath && file_exists($filepath)) {
+            $fileDeleted = unlink($filepath);
+        }
+
+        $this->logService->log(
+            'vpn_arreter',
+            $vpnStopped && $fileDeleted ? 'succes' : 'echec',
+            'assistance',
+            null,
+            [
+                'fichier' => $filename,
+                'vpn_stopped' => $vpnStopped,
+                'file_deleted' => $fileDeleted,
+                'output' => $output
+            ],
+            null,
+            $login
+        );
+
+        return new JsonResponse([
+            'ok' => $vpnStopped && $fileDeleted,
+            'message' => ($vpnStopped && $fileDeleted)
+                ? "VPN arrêté et fichier supprimé."
+                : "Erreur lors de l'arrêt ou suppression : $output",
+        ]);
+    }
+    
+    // ------------------------------------------------------------------
+    // STATUT VPN (AJAX polling)
+    // ------------------------------------------------------------------
+    #[Route('/vpn/statut', name: 'app_assistance_vpn_statut', methods: ['GET'])]
+    public function vpnStatut(): JsonResponse
+    {
+        return new JsonResponse($this->vpnStatutData());
+    }
+
+    // ------------------------------------------------------------------
+    // TICKET DE DÉPANNAGE
+    // ------------------------------------------------------------------
+    #[Route('/ticket', name: 'app_assistance_ticket', methods: ['POST'])]
+    public function ticket(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('assistance_ticket', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $login        = $this->getUser()?->getUserIdentifier() ?? 'inconnu';
+        $type         = $request->request->get('type', 'bug');
+        $titre        = trim($request->request->get('titre', '(sans titre)'));
+        $module       = trim($request->request->get('module', ''));
+        $urgence      = $request->request->get('urgence', 'normal');
+        $description  = trim($request->request->get('description', ''));
+        $reproduction = trim($request->request->get('reproduction', ''));
+        $attendu      = trim($request->request->get('attendu', ''));
+        $reel         = trim($request->request->get('reel', ''));
+        $erreur       = trim($request->request->get('erreur', ''));
+
+        $typeLabel    = match ($type) {
+            'bug'     => '🐛 Bug report',
+            'support' => '❓ Question / Support',
+            'feature' => '✨ Feature request',
+            default   => '📋 Demande',
+        };
+        $urgenceLabel = match ($urgence) {
+            'bloquant'  => '🔴 BLOQUANT',
+            'important' => '🟠 Important',
+            default     => '🟡 Normal',
+        };
+
+        $mailEnvoye = false;
+        $mailErreur = null;
+
+        try {
+            $email = (new Email())
+                ->from('noreply@comite-maore.org')
+                ->to(self::TECH_EMAIL)
+                ->subject("[Comité Maoré] $typeLabel — $urgenceLabel — $titre")
+                ->html($this->genererHtmlMail(
+                    $login, $typeLabel, $urgenceLabel, $titre,
+                    $module, $description, $reproduction, $attendu, $reel, $erreur
+                ));
+            $this->mailer->send($email);
+            $mailEnvoye = true;
+        } catch (\Exception $e) {
+            $mailErreur = $e->getMessage();
+        }
+
+        $this->logService->log('assistance_ticket', $mailEnvoye ? 'succes' : 'echec',
+            'assistance', null,
+            ['type' => $type, 'urgence' => $urgence, 'titre' => $titre],
+            null, $login);
+
+        return $this->render('assistance/ticket_envoye.html.twig', [
+            'titre'          => $titre,
+            'type_label'     => $typeLabel,
+            'urgence_label'  => $urgenceLabel,
+            'mail_envoye'    => $mailEnvoye,
+            'mail_erreur'    => $mailErreur,
+            'issue_markdown' => $this->genererIssueMarkdown(
+                $type, $login, $urgenceLabel, $titre,
+                $module, $description, $reproduction, $attendu, $reel, $erreur
+            ),
+            'github_new'  => 'https://github.com/' . self::GITHUB_REPO . '/issues/new',
+            'github_repo' => self::GITHUB_REPO,
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+    private function vpnStatutData(): array
+    {
+        if (!file_exists(self::SCRIPT_STATUS)) {
+            return ['actif' => false, 'pid' => null, 'scripts_installes' => false];
+        }
+        $output = trim(shell_exec('sudo ' . escapeshellarg(self::SCRIPT_STATUS) . ' 2>&1') ?? '');
+        if (str_starts_with($output, 'RUNNING:')) {
+            return ['actif' => true, 'pid' => explode(':', $output)[1] ?? null, 'scripts_installes' => true];
+        }
+        return ['actif' => false, 'pid' => null, 'scripts_installes' => true];
+    }
+
+    private function genererHtmlMail(
+        string $login, string $type, string $urgence, string $titre,
+        string $module, string $desc, string $repro,
+        string $attendu, string $reel, string $erreur
+    ): string {
+        // Pré-calculer toutes les variables — les closures et ternaires
+        // ne sont pas autorisés dans les interpolations de heredoc PHP.
+        $hTitre   = nl2br(htmlspecialchars($titre));
+        $hModule  = $module  ? nl2br(htmlspecialchars($module))  : '—';
+        $hDesc    = nl2br(htmlspecialchars($desc));
+        $hRepro   = $repro   ? nl2br(htmlspecialchars($repro))   : '—';
+        $hAttendu = $attendu ? nl2br(htmlspecialchars($attendu)) : '—';
+        $hReel    = $reel    ? nl2br(htmlspecialchars($reel))    : '—';
+        $hErreur  = $erreur  ? nl2br(htmlspecialchars($erreur))  : '—';
+        $host     = htmlspecialchars($_SERVER['HTTP_HOST'] ?? 'localhost');
+
+        return <<<HTML
+<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<style>
+  body{font-family:Arial,sans-serif;color:#1a202c;background:#f7fafc;margin:0;padding:20px;}
+  .card{background:#fff;border-radius:8px;padding:28px;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;}
+  h2{margin-top:0;color:#c53030;}
+  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;}
+  .s{margin:10px 0;padding:10px 14px;background:#f7fafc;border-radius:6px;border-left:3px solid #4299e1;}
+  .l{font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px;}
+  .footer{font-size:11px;color:#a0aec0;margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;}
+</style></head><body><div class="card">
+  <h2>🔧 Ticket — Comité Maoré</h2>
+  <span class="badge" style="background:#fed7d7;color:#c53030;">$urgence</span>
+  <span class="badge" style="background:#e2e8f0;color:#4a5568;margin-left:4px;">$type</span>
+  <div class="s"><div class="l">Titre</div><strong>$hTitre</strong></div>
+  <div class="s"><div class="l">Demandeur</div>$login</div>
+  <div class="s"><div class="l">Module</div>$hModule</div>
+  <div class="s"><div class="l">Description</div>$hDesc</div>
+  <div class="s"><div class="l">Reproduction</div>$hRepro</div>
+  <div class="s"><div class="l">Attendu</div>$hAttendu</div>
+  <div class="s"><div class="l">Réel</div>$hReel</div>
+  <div class="s"><div class="l">Erreur</div><code style="font-size:12px;">$hErreur</code></div>
+  <div class="footer">Comité Maoré · $host</div>
+</div></body></html>
+HTML;
+    }
+
+    private function genererIssueMarkdown(
+        string $type, string $login, string $urgence, string $titre,
+        string $module, string $desc, string $repro,
+        string $attendu, string $reel, string $erreur
+    ): string {
+        $icon  = match ($type) { 'bug' => '🐛', 'support' => '❓', 'feature' => '✨', default => '📋' };
+        $lines = ["# $icon $titre", '', "**Urgence :** $urgence  ", "**Demandeur :** $login  "];
+        if ($module) $lines[] = "**Module :** $module  ";
+        $lines[] = '';
+        $lines[] = '## Description';
+        $lines[] = $desc ?: '_Non renseigné_';
+        $lines[] = '';
+        if ($repro) {
+            $lines[] = '## Étapes pour reproduire';
+            foreach (array_filter(explode("\n", $repro)) as $i => $s) {
+                $lines[] = ($i + 1) . '. ' . trim($s);
+            }
+            $lines[] = '';
+        }
+        if ($attendu) { $lines[] = '## Comportement attendu'; $lines[] = $attendu; $lines[] = ''; }
+        if ($reel)    { $lines[] = '## Comportement réel';    $lines[] = $reel;    $lines[] = ''; }
+        if ($erreur)  {
+            $lines[] = '## Message d\'erreur';
+            $lines[] = '```'; $lines[] = $erreur; $lines[] = '```'; $lines[] = '';
+        }
+        $lines[] = '---';
+        $lines[] = '_Généré depuis Comité Maoré — ' . date('d/m/Y H:i') . '_';
+        return implode("\n", $lines);
+    }
+}

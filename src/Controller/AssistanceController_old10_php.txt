@@ -24,14 +24,14 @@ class AssistanceController extends AbstractController
     private const SCRIPT_STATUS = '/usr/local/bin/comitemaore_status_vpn.sh';
 
     public function __construct(
-        private readonly LogService $logService,
+        private readonly LogService      $logService,
         private readonly MailerInterface $mailer,
-        private readonly string $projectDir,
+        private readonly string          $projectDir,
     ) {}
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
     // PAGE PRINCIPALE
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
     #[Route('', name: 'app_assistance')]
     public function index(): Response
     {
@@ -57,38 +57,10 @@ class AssistanceController extends AbstractController
         ]);
     }
 
-    // ------------------------------------------------------------
-    // TICKET DE DÉPANNAGE
-    // ------------------------------------------------------------
-    #[Route('/ticket', name: 'app_assistance_ticket', methods: ['POST'])]
-    public function ticket(Request $request): Response
-    {
-        if (!$this->isCsrfTokenValid('assistance_ticket', $request->request->get('_token'))) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $login = $this->getUser()?->getUserIdentifier() ?? 'inconnu';
-
-        $type        = $request->request->get('type', 'bug');
-        $titre       = trim($request->request->get('titre', '(sans titre)'));
-        $urgence     = $request->request->get('urgence', 'normal');
-
-        // Tu peux simplifier pour commencer
-        return $this->render('assistance/ticket_envoye.html.twig', [
-            'titre'         => $titre,
-            'type_label'    => $type,
-            'urgence_label' => $urgence,
-            'mail_envoye'   => true,
-            'mail_erreur'   => null,
-            'issue_markdown'=> '',
-            'github_new'    => '',
-            'github_repo'   => '',
-        ]);
-    }
-
-    // ------------------------------------------------------------
-    // UPLOAD VPN
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // UPLOAD .ovpn
+    // ------------------------------------------------------------------
+    //#[Route('/assistance/vpn/upload', name: 'app_assistance_vpn_upload', methods: ['POST'])]
     #[Route('/vpn/upload', name: 'app_assistance_vpn_upload', methods: ['POST'])]
     public function vpnUpload(Request $request): Response
     {
@@ -98,12 +70,14 @@ class AssistanceController extends AbstractController
 
         $file = $request->files->get('vpn_config');
         if (!$file || strtolower($file->getClientOriginalExtension()) !== 'ovpn') {
-            $this->addFlash('danger', 'Fichier invalide (.ovpn uniquement)');
+            $this->addFlash('danger', 'Fichier invalide. Seuls les fichiers .ovpn sont acceptés.');
             return $this->redirectToRoute('app_assistance');
         }
 
         $dir = $this->projectDir . '/' . self::VPN_DIR;
-        if (!is_dir($dir)) mkdir($dir, 0750, true);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0750, true);
+        }
 
         foreach (glob($dir . '/vpn_*.ovpn') as $old) {
             unlink($old);
@@ -115,137 +89,125 @@ class AssistanceController extends AbstractController
 
         $file->move($dir, $filename);
 
-        $this->logService->log('vpn_upload', 'succes', 'assistance', null,
-            ['fichier' => $filename], null, $login);
+        $this->logService->log('vpn_upload', 'succes', 'assistance', null, [
+            'fichier' => $filename
+        ], null, $login);
 
-        $this->addFlash('success', "Profil importé : $filename");
+        $this->addFlash('success', "Profil « $filename » importé et prêt.");
         return $this->redirectToRoute('app_assistance');
     }
 
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
     // LANCER VPN
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
     #[Route('/vpn/lancer', name: 'app_assistance_vpn_lancer', methods: ['POST'])]
     public function vpnLancer(Request $request): JsonResponse
     {
         if (!$this->isCsrfTokenValid('vpn_lancer', $request->request->get('_token'))) {
-            return new JsonResponse(['ok' => false, 'message' => 'CSRF invalide'], 403);
+            return new JsonResponse(['ok' => false, 'message' => 'Token CSRF invalide.'], 403);
         }
 
         $filename = basename($request->request->get('filename', ''));
         $filepath = $this->projectDir . '/' . self::VPN_DIR . '/' . $filename;
 
         if (!preg_match('/^vpn_[a-zA-Z0-9_-]+\.ovpn$/', $filename) || !file_exists($filepath)) {
-            return new JsonResponse(['ok' => false, 'message' => 'Fichier invalide']);
+            return new JsonResponse(['ok' => false, 'message' => 'Fichier invalide ou introuvable.']);
         }
 
-        // ✅ sudo sécurisé (non interactif)
+        if (!file_exists(self::SCRIPT_START)) {
+            return new JsonResponse(['ok' => false, 'message' => 'Script start manquant.']);
+        }
+
         $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_START)
-            . ' ' . escapeshellarg($filepath) . ' 2>&1';
+             . ' ' . escapeshellarg($filepath) . ' 2>&1';
 
         $output = trim(shell_exec($cmd) ?? '');
-
-        // 🔒 détection erreur sudo
-        if ($output === '' || str_contains($output, 'sudo:')) {
-            return new JsonResponse([
-                'ok' => false,
-                'message' => 'Erreur sudo (droits non configurés)'
-            ]);
-        }
-
         $ok = str_starts_with($output, 'OK:');
 
+        $login = $this->getUser()?->getUserIdentifier() ?? 'admin';
+
+        $this->logService->log('vpn_lancer', $ok ? 'succes' : 'echec', 'assistance', null, [
+            'fichier' => $filename,
+            'output'  => $output
+        ], null, $login);
+
         return new JsonResponse([
-            'ok' => $ok,
-            'message' => $ok ? 'Connexion VPN établie' : $output
+            'ok'      => $ok,
+            'message' => $ok
+                ? "Connexion VPN établie avec « $filename »."
+                : "Erreur lancement : $output",
         ]);
     }
-    // ------------------------------------------------------------
-    // STOP VPN + SUPPRESSION FICHIER
-    // ------------------------------------------------------------
+
+    // ------------------------------------------------------------------
+    // ARRÊTER VPN + SUPPRIMER FICHIER
+    // ------------------------------------------------------------------
     #[Route('/vpn/arreter', name: 'app_assistance_vpn_arreter', methods: ['POST'])]
     public function vpnArreter(Request $request): JsonResponse
     {
         if (!$this->isCsrfTokenValid('vpn_arreter', $request->request->get('_token'))) {
-            return new JsonResponse(['ok' => false, 'message' => 'CSRF invalide'], 403);
+            return new JsonResponse(['ok' => false, 'message' => 'Token CSRF invalide.'], 403);
         }
 
         $filename = basename($request->request->get('filename', ''));
         $filepath = $this->projectDir . '/' . self::VPN_DIR . '/' . $filename;
 
-        // ✅ sudo sécurisé
+        if (!file_exists(self::SCRIPT_STOP)) {
+            return new JsonResponse(['ok' => false, 'message' => 'Script stop manquant.']);
+        }
+
         $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_STOP) . ' 2>&1';
         $output = trim(shell_exec($cmd) ?? '');
-
-        if ($output === '' || str_contains($output, 'sudo:')) {
-            return new JsonResponse([
-                'ok' => false,
-                'message' => 'Erreur sudo (droits non configurés)'
-            ]);
-        }
 
         $vpnStopped = str_starts_with($output, 'STOPPED');
         $fileDeleted = false;
 
-        // 🔒 suppression contrôlée
         if ($vpnStopped && file_exists($filepath)) {
             $fileDeleted = unlink($filepath);
         }
 
+        $login = $this->getUser()?->getUserIdentifier() ?? 'admin';
+
+        $this->logService->log('vpn_arreter', $vpnStopped && $fileDeleted ? 'succes' : 'echec', 'assistance', null, [
+            'fichier' => $filename,
+            'output'  => $output,
+            'deleted' => $fileDeleted
+        ], null, $login);
+
         return new JsonResponse([
-            'ok' => $vpnStopped && $fileDeleted,
+            'ok'      => $vpnStopped && $fileDeleted,
             'message' => ($vpnStopped && $fileDeleted)
-                ? 'VPN arrêté et fichier supprimé'
-                : $output
+                ? "VPN arrêté et fichier supprimé."
+                : "Erreur arrêt VPN : $output",
         ]);
     }
 
-    // ------------------------------------------------------------
-    // STATUT VPN (AJAX)
-    // ------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // STATUT VPN
+    // ------------------------------------------------------------------
     #[Route('/vpn/statut', name: 'app_assistance_vpn_statut', methods: ['GET'])]
     public function vpnStatut(): JsonResponse
     {
         return new JsonResponse($this->vpnStatutData());
     }
 
-    // ------------------------------------------------------------
-    // STATUT VPN
-    // ------------------------------------------------------------
     private function vpnStatutData(): array
     {
         if (!file_exists(self::SCRIPT_STATUS)) {
-            return [
-                'actif' => false,
-                'pid' => null,
-                'scripts_installes' => false
-            ];
+            return ['actif' => false, 'pid' => null];
         }
 
-        $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_STATUS) . ' 2>&1';
-        $output = trim(shell_exec($cmd) ?? '');
-
-        if ($output === '' || str_contains($output, 'sudo:')) {
-            return [
-                'actif' => false,
-                'pid' => null,
-                'scripts_installes' => true,
-                'error' => 'sudo'
-            ];
-        }
+        $output = trim(shell_exec(
+            'sudo -n ' . escapeshellarg(self::SCRIPT_STATUS) . ' 2>&1'
+        ) ?? '');
 
         if (str_starts_with($output, 'RUNNING:')) {
             return [
                 'actif' => true,
-                'pid' => explode(':', $output)[1] ?? null,
-                'scripts_installes' => true
+                'pid'   => explode(':', $output)[1] ?? null
             ];
         }
 
-        return [
-            'actif' => false,
-            'pid' => null,
-            'scripts_installes' => true
-        ];
+        return ['actif' => false, 'pid' => null];
     }
 }
