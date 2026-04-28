@@ -54,20 +54,15 @@ class SearchController extends AbstractController
                 $error = 'Veuillez sélectionner une table.';
             } else {
                 try {
-                    // Colonne à sélectionner
-                    $colSql = ($column === '*' || $column === '')
+                    $colSql = $column === '*'
                         ? '*'
                         : $this->connection->quoteIdentifier($column);
 
                     $tblSql = $this->connection->quoteIdentifier($table);
-                    $offset = $limite > 0 ? ($page - 1) * $limite : 0;
-
-                    // Valeur vide = pas de filtre WHERE → équivalent à "*"
-                    $hasFilter = ($value !== '' && $column !== '' && $column !== '*');
 
                     // Compter le total
-                    if ($hasFilter) {
-                        $colWhere   = $this->connection->quoteIdentifier($column);
+                    if ($value !== '') {
+                        $colWhere   = $this->connection->quoteIdentifier($column === '*' ? 'id' : $column);
                         $totalCount = (int) $this->connection->fetchOne(
                             "SELECT COUNT(*) FROM $tblSql WHERE $colWhere LIKE :val",
                             ['val' => '%' . $value . '%']
@@ -76,18 +71,17 @@ class SearchController extends AbstractController
                         $totalCount = (int) $this->connection->fetchOne("SELECT COUNT(*) FROM $tblSql");
                     }
 
-                    // Construire la requête principale
-                    if ($hasFilter) {
-                        $colWhere = $this->connection->quoteIdentifier($column);
-                        $sql      = "SELECT $colSql FROM $tblSql WHERE $colWhere LIKE :val"
-                                  . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
-                        $results  = $this->connection->fetchAllAssociative(
-                            $sql, ['val' => '%' . $value . '%']
-                        );
+                    // Construire la requête avec pagination
+                    $offset = $limite > 0 ? ($page - 1) * $limite : 0;
+
+                    if ($value !== '') {
+                        $colWhere = $this->connection->quoteIdentifier($column === '*' ? 'id' : $column);
+                        $sql = "SELECT $colSql FROM $tblSql WHERE $colWhere LIKE :val"
+                             . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
+                        $results = $this->connection->fetchAllAssociative($sql, ['val' => '%' . $value . '%']);
                     } else {
-                        // Champ vide OU colonne = * → tout afficher (SELECT * FROM table)
-                        $sql     = "SELECT $colSql FROM $tblSql"
-                                 . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
+                        $sql = "SELECT $colSql FROM $tblSql"
+                             . ($limite > 0 ? " LIMIT $limite OFFSET $offset" : '');
                         $results = $this->connection->fetchAllAssociative($sql);
                     }
 

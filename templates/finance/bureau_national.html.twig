@@ -1,0 +1,258 @@
+{# templates/finance/bureau_national.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}État financier — Bureau Exécutif National{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_finance_ben') }}" class="active">💰 Finances BEN</a>
+        {% if is_admin %}
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+            <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+
+        {# En-tête #}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:700;margin-bottom:4px;">
+                    🏛 État financier — Bureau Exécutif National
+                </h1>
+                <div style="font-size:13px;opacity:.5;">
+                    Vue consolidée · {{ totaux.nb_sections ?? 0 }} section(s) · Année {{ annee == 0 ? 'toutes' : annee }}
+                </div>
+            </div>
+            <form method="get" style="display:flex;align-items:center;gap:8px;">
+                <label style="font-size:13px;opacity:.6;">Année :</label>
+                <select name="annee" class="form-control" onchange="this.form.submit()" style="width:100px;">
+                    {% for a in annees %}
+                        <option value="{{ a }}" {{ a == annee ? 'selected' : '' }}>{{ a }}</option>
+                    {% endfor %}
+                    <option value="0" {{ annee == 0 ? 'selected' : '' }}>Toutes</option>
+                </select>
+            </form>
+        </div>
+
+        {# KPIs principaux #}
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
+
+            <div class="card" style="border:1px solid rgba(239,159,39,.4);text-align:center;">
+                <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;margin-bottom:8px;">
+                    🏛 Recettes Bureau National (50%)
+                </div>
+                <div style="font-size:34px;font-weight:700;color:#fbd38d;">
+                    {{ totaux.part_ben|number_format(2, ',', ' ') }} €
+                </div>
+                <div style="font-size:12px;opacity:.4;margin-top:6px;">
+                    50% de chaque cotisation/don encaissé
+                </div>
+            </div>
+
+            <div class="card" style="border:1px solid rgba(99,179,237,.4);text-align:center;">
+                <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;margin-bottom:8px;">
+                    🏘 Redistribué aux fédérations (30%)
+                </div>
+                <div style="font-size:34px;font-weight:700;color:#90cdf4;">
+                    {{ totaux.part_federations|number_format(2, ',', ' ') }} €
+                </div>
+                <div style="font-size:12px;opacity:.4;margin-top:6px;">
+                    30% redistribués aux fédérations
+                </div>
+            </div>
+
+            <div class="card" style="border:1px solid rgba(104,211,145,.4);text-align:center;">
+                <div style="font-size:11px;font-weight:600;opacity:.5;text-transform:uppercase;margin-bottom:8px;">
+                    📍 Redistribué aux sections (20%)
+                </div>
+                <div style="font-size:34px;font-weight:700;color:#9ae6b4;">
+                    {{ totaux.part_sections|number_format(2, ',', ' ') }} €
+                </div>
+                <div style="font-size:12px;opacity:.4;margin-top:6px;">
+                    20% redistribués aux sections
+                </div>
+            </div>
+        </div>
+
+        {# Entrées totales #}
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+            {% for label, val, color in [
+                ['Total cotisations', totaux.total_cotis,    '#e9d8fd'],
+                ['Total dons',        totaux.total_dons,     '#fed7d7'],
+                ['Cotis. dues',       totaux.total_dues,     '#feebc8'],
+                ['Ristournes',        totaux.total_ristourne,'#c6f6d5']
+            ] %}
+            <div class="card" style="text-align:center;padding:14px;">
+                <div style="font-size:11px;opacity:.5;text-transform:uppercase;margin-bottom:4px;">{{ label }}</div>
+                <div style="font-size:20px;font-weight:700;color:{{ color|default('#000') }};">
+                    {{ val|number_format(2, ',', ' ') }} €
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Détail par fédération #}
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-title">Détail par fédération — {{ annee == 0 ? 'Toutes années' : annee }}</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Fédération</th>
+                        <th>Sections</th>
+                        <th>Cotisations</th>
+                        <th>Dons</th>
+                        <th style="color:#fbd38d;">→ BEN (50%)</th>
+                        <th style="color:#90cdf4;">→ Féd. (30%)</th>
+                        <th style="color:#9ae6b4;">→ Sec. (20%)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fed in par_federation %}
+                    <tr>
+                        <td>
+                            <strong>{{ fed.federation }}</strong>
+                            {% if fed.nom_complet %}
+                                <div style="font-size:11px;opacity:.5;">{{ fed.nom_complet }}</div>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">{{ fed.nb_sections }}</td>
+                        <td>{{ fed.total_cotis|number_format(2, ',', ' ') }} €</td>
+                        <td>{{ fed.total_dons|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#fbd38d;font-weight:600;">
+                            {{ fed.part_ben|number_format(2, ',', ' ') }} €
+                        </td>
+                        <td style="color:#90cdf4;font-weight:600;">
+                            {{ fed.part_fed|number_format(2, ',', ' ') }} €
+                        </td>
+                        <td style="color:#9ae6b4;">
+                            {{ fed.part_sections|number_format(2, ',', ' ') }} €
+                        </td>
+                        <td>
+                            <a href="{{ path('app_finance_federation', {idFederation: fed.id_federation, annee: annee}) }}"
+                               class="btn btn-secondary btn-sm">Détail</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" style="opacity:.4;text-align:center;padding:20px;">
+                        Aucune donnée financière pour {{ annee }}
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+                {% if par_federation|length > 0 %}
+                <tfoot>
+                    <tr style="font-weight:700;border-top:2px solid rgba(255,255,255,.2);">
+                        <td>TOTAL</td>
+                        <td style="text-align:center;">{{ totaux.nb_sections }}</td>
+                        <td>{{ totaux.total_cotis|number_format(2, ',', ' ') }} €</td>
+                        <td>{{ totaux.total_dons|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#fbd38d;">{{ totaux.part_ben|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#90cdf4;">{{ totaux.part_federations|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#9ae6b4;">{{ totaux.part_sections|number_format(2, ',', ' ') }} €</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+
+        {# Évolution annuelle #}
+        {% if evolution|length > 1 %}
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-title">Évolution annuelle</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Année</th><th>Sections</th>
+                        <th>Cotisations</th><th>Dons</th>
+                        <th style="color:#fbd38d;">BEN (50%)</th>
+                        <th style="color:#90cdf4;">Fédérations (30%)</th>
+                        <th style="color:#9ae6b4;">Sections (20%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ev in evolution %}
+                    <tr style="{{ ev.annee_finance == annee ? 'background:rgba(255,255,255,.05);' : '' }}">
+                        <td>
+                            <strong>{{ ev.annee_finance }}</strong>
+                            {% if ev.annee_finance == annee %}
+                                <span style="font-size:10px;color:#90cdf4;margin-left:4px;">← sélectionnée</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">{{ ev.nb_sections }}</td>
+                        <td>{{ ev.total_cotis|number_format(2, ',', ' ') }} €</td>
+                        <td>{{ ev.total_dons|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#fbd38d;">{{ ev.part_ben|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#90cdf4;">{{ ev.part_federations|number_format(2, ',', ' ') }} €</td>
+                        <td style="color:#9ae6b4;">{{ ev.part_sections|number_format(2, ',', ' ') }} €</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {# Dernières opérations #}
+        <div class="card" style="padding:0;overflow:hidden;">
+            <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
+                <span style="font-weight:600;">Dernières opérations enregistrées</span>
+                <span style="font-size:12px;opacity:.5;margin-left:8px;">20 dernières</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>NIN</th><th>Adhérent</th>
+                            <th>Section</th><th>Fédération</th><th>Type</th>
+                            <th>Montant</th>
+                            <th style="color:#fbd38d;">BEN</th>
+                            <th style="color:#90cdf4;">Féd.</th>
+                            <th style="color:#9ae6b4;">Sec.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for op in dernieres %}
+                        <tr>
+                            <td style="font-size:12px;white-space:nowrap;">{{ op.date_operation|date('d/m/Y') }}</td>
+                            <td style="font-family:monospace;font-size:11px;">{{ op.NIN_adh ?? '—' }}</td>
+                            <td style="font-size:13px;">{{ op.nom_adht }} {{ op.prenom_adht }}</td>
+                            <td style="font-size:12px;opacity:.7;">{{ op.nom_section ?? '—' }}</td>
+                            <td style="font-size:12px;opacity:.7;">{{ op.nom_federation ?? '—' }}</td>
+                            <td><span style="font-size:11px;padding:1px 6px;border-radius:3px;
+                                background:rgba(255,255,255,.07);">
+                                {{ op.type_operation|replace({'_': ' '})|title }}</span></td>
+                            <td><strong>{{ op.montant|number_format(2, ',', ' ') }} €</strong></td>
+                            <td style="font-size:12px;color:#fbd38d;">{{ op.montant_burnatexec|number_format(2, ',', ' ') }} €</td>
+                            <td style="font-size:12px;color:#90cdf4;">{{ op.montant_fedcorresp|number_format(2, ',', ' ') }} €</td>
+                            <td style="font-size:12px;color:#9ae6b4;">{{ op.montant_sectcorresp|number_format(2, ',', ' ') }} €</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="10" style="opacity:.4;text-align:center;padding:20px;">
+                            Aucune opération
+                        </td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+</div>
+{% endblock %}
