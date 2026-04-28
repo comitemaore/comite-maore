@@ -1,0 +1,251 @@
+<?php
+
+namespace App\Controller;
+
+use App\Service\LogService;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+
+#[IsGranted('ROLE_ADMIN')]
+#[Route('/assistance')]
+class AssistanceController extends AbstractController
+{
+    private const TECH_EMAIL    = 'admin.technique@comite-maore.org';
+    private const GITHUB_REPO   = 'votre-organisation/comite-maore';
+    private const VPN_DIR       = 'var/vpn_configs';
+    private const SCRIPT_START  = '/usr/local/bin/comitemaore_start_vpn.sh';
+    private const SCRIPT_STOP   = '/usr/local/bin/comitemaore_stop_vpn.sh';
+    private const SCRIPT_STATUS = '/usr/local/bin/comitemaore_status_vpn.sh';
+
+    public function __construct(
+        private readonly LogService $logService,
+        private readonly MailerInterface $mailer,
+        private readonly string $projectDir,
+    ) {}
+
+    // ------------------------------------------------------------
+    // PAGE PRINCIPALE
+    // ------------------------------------------------------------
+    #[Route('', name: 'app_assistance')]
+    public function index(): Response
+    {
+        $vpnDir   = $this->projectDir . '/' . self::VPN_DIR;
+        $vpnFiles = [];
+
+        if (is_dir($vpnDir)) {
+            foreach (glob($vpnDir . '/vpn_*.ovpn') as $f) {
+                $vpnFiles[] = [
+                    'nom'    => basename($f),
+                    'path'   => $f,
+                    'taille' => round(filesize($f) / 1024, 1) . ' Ko',
+                    'date'   => date('d/m/Y H:i', filemtime($f)),
+                ];
+            }
+        }
+
+        return $this->render('assistance/index.html.twig', [
+            'github_repo' => self::GITHUB_REPO,
+            'vpn_files'   => $vpnFiles,
+            'vpn_statut'  => $this->vpnStatutData(),
+            'scripts_ok'  => file_exists(self::SCRIPT_START),
+        ]);
+    }
+
+    // ------------------------------------------------------------
+    // TICKET DE DÉPANNAGE
+    // ------------------------------------------------------------
+    #[Route('/ticket', name: 'app_assistance_ticket', methods: ['POST'])]
+    public function ticket(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('assistance_ticket', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $login = $this->getUser()?->getUserIdentifier() ?? 'inconnu';
+
+        $type        = $request->request->get('type', 'bug');
+        $titre       = trim($request->request->get('titre', '(sans titre)'));
+        $urgence     = $request->request->get('urgence', 'normal');
+
+        // Tu peux simplifier pour commencer
+        return $this->render('assistance/ticket_envoye.html.twig', [
+            'titre'         => $titre,
+            'type_label'    => $type,
+            'urgence_label' => $urgence,
+            'mail_envoye'   => true,
+            'mail_erreur'   => null,
+            'issue_markdown'=> '',
+            'github_new'    => '',
+            'github_repo'   => '',
+        ]);
+    }
+
+    // ------------------------------------------------------------
+    // UPLOAD VPN
+    // ------------------------------------------------------------
+    #[Route('/vpn/upload', name: 'app_assistance_vpn_upload', methods: ['POST'])]
+    public function vpnUpload(Request $request): Response
+    {
+        if (!$this->isCsrfTokenValid('assistance_vpn', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $file = $request->files->get('vpn_config');
+        if (!$file || strtolower($file->getClientOriginalExtension()) !== 'ovpn') {
+            $this->addFlash('danger', 'Fichier invalide (.ovpn uniquement)');
+            return $this->redirectToRoute('app_assistance');
+        }
+
+        $dir = $this->projectDir . '/' . self::VPN_DIR;
+        if (!is_dir($dir)) mkdir($dir, 0750, true);
+
+        foreach (glob($dir . '/vpn_*.ovpn') as $old) {
+            unlink($old);
+        }
+
+        $login    = $this->getUser()?->getUserIdentifier() ?? 'admin';
+        $slug     = preg_replace('/[^a-zA-Z0-9_-]/', '_', $login);
+        $filename = 'vpn_' . $slug . '_' . date('Ymd_His') . '.ovpn';
+
+        $file->move($dir, $filename);
+
+        $this->logService->log('vpn_upload', 'succes', 'assistance', null,
+            ['fichier' => $filename], null, $login);
+
+        $this->addFlash('success', "Profil importé : $filename");
+        return $this->redirectToRoute('app_assistance');
+    }
+
+    // ------------------------------------------------------------
+    // LANCER VPN
+    // ------------------------------------------------------------
+    #[Route('/vpn/lancer', name: 'app_assistance_vpn_lancer', methods: ['POST'])]
+    public function vpnLancer(Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('vpn_lancer', $request->request->get('_token'))) {
+            return new JsonResponse(['ok' => false, 'message' => 'CSRF invalide'], 403);
+        }
+
+        $filename = basename($request->request->get('filename', ''));
+        $filepath = $this->projectDir . '/' . self::VPN_DIR . '/' . $filename;
+
+        if (!preg_match('/^vpn_[a-zA-Z0-9_-]+\.ovpn$/', $filename) || !file_exists($filepath)) {
+            return new JsonResponse(['ok' => false, 'message' => 'Fichier invalide']);
+        }
+
+        // ✅ sudo sécurisé (non interactif)
+        $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_START)
+            . ' ' . escapeshellarg($filepath) . ' 2>&1';
+
+        $output = trim(shell_exec($cmd) ?? '');
+
+        // 🔒 détection erreur sudo
+        if ($output === '' || str_contains($output, 'sudo:')) {
+            return new JsonResponse([
+                'ok' => false,
+                'message' => 'Erreur sudo (droits non configurés)'
+            ]);
+        }
+
+        $ok = str_starts_with($output, 'OK:');
+
+        return new JsonResponse([
+            'ok' => $ok,
+            'message' => $ok ? 'Connexion VPN établie' : $output
+        ]);
+    }
+    // ------------------------------------------------------------
+    // STOP VPN + SUPPRESSION FICHIER
+    // ------------------------------------------------------------
+    #[Route('/vpn/arreter', name: 'app_assistance_vpn_arreter', methods: ['POST'])]
+    public function vpnArreter(Request $request): JsonResponse
+    {
+        if (!$this->isCsrfTokenValid('vpn_arreter', $request->request->get('_token'))) {
+            return new JsonResponse(['ok' => false, 'message' => 'CSRF invalide'], 403);
+        }
+
+        $filename = basename($request->request->get('filename', ''));
+        $filepath = $this->projectDir . '/' . self::VPN_DIR . '/' . $filename;
+
+        // ✅ sudo sécurisé
+        $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_STOP) . ' 2>&1';
+        $output = trim(shell_exec($cmd) ?? '');
+
+        if ($output === '' || str_contains($output, 'sudo:')) {
+            return new JsonResponse([
+                'ok' => false,
+                'message' => 'Erreur sudo (droits non configurés)'
+            ]);
+        }
+
+        $vpnStopped = str_starts_with($output, 'STOPPED');
+        $fileDeleted = false;
+
+        // 🔒 suppression contrôlée
+        if ($vpnStopped && file_exists($filepath)) {
+            $fileDeleted = unlink($filepath);
+        }
+
+        return new JsonResponse([
+            'ok' => $vpnStopped && $fileDeleted,
+            'message' => ($vpnStopped && $fileDeleted)
+                ? 'VPN arrêté et fichier supprimé'
+                : $output
+        ]);
+    }
+
+    // ------------------------------------------------------------
+    // STATUT VPN (AJAX)
+    // ------------------------------------------------------------
+    #[Route('/vpn/statut', name: 'app_assistance_vpn_statut', methods: ['GET'])]
+    public function vpnStatut(): JsonResponse
+    {
+        return new JsonResponse($this->vpnStatutData());
+    }
+
+    // ------------------------------------------------------------
+    // STATUT VPN
+    // ------------------------------------------------------------
+    private function vpnStatutData(): array
+    {
+        if (!file_exists(self::SCRIPT_STATUS)) {
+            return [
+                'actif' => false,
+                'pid' => null,
+                'scripts_installes' => false
+            ];
+        }
+
+        $cmd = 'sudo -n ' . escapeshellarg(self::SCRIPT_STATUS) . ' 2>&1';
+        $output = trim(shell_exec($cmd) ?? '');
+
+        if ($output === '' || str_contains($output, 'sudo:')) {
+            return [
+                'actif' => false,
+                'pid' => null,
+                'scripts_installes' => true,
+                'error' => 'sudo'
+            ];
+        }
+
+        if (str_starts_with($output, 'RUNNING:')) {
+            return [
+                'actif' => true,
+                'pid' => explode(':', $output)[1] ?? null,
+                'scripts_installes' => true
+            ];
+        }
+
+        return [
+            'actif' => false,
+            'pid' => null,
+            'scripts_installes' => true
+        ];
+    }
+}

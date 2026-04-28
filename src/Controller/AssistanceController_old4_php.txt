@@ -144,30 +144,32 @@ auth-user-pass $authTxt
             ]);
         }
 
-        // Appel direct avec sudo -n (non-interactive).
-        // Si sudoers est mal configuré, la sortie contiendra "password"
-        // et on retourne un message explicite.
-        $cmd    = 'sudo -n ' . escapeshellarg(self::SCRIPT_START)
-                . ' ' . escapeshellarg($filepath) . ' 2>&1';
-        $output = trim(shell_exec($cmd) ?? '');
-        $login  = $this->getUser()?->getUserIdentifier() ?? 'admin';
+        // Vérifier que sudo fonctionne sans mot de passe pour ce script
+        $testCmd    = 'sudo -n ' . escapeshellarg(self::SCRIPT_START) . ' --test 2>&1';
+        // On teste avec sudo -n (non-interactive) : si sudo demande un mdp, exit != 0
+        $sudoTest   = shell_exec('sudo -n -l ' . escapeshellarg(self::SCRIPT_START) . ' 2>&1');
+        $sudoOk     = ($sudoTest !== null && !str_contains($sudoTest, 'password is required')
+                        && !str_contains($sudoTest, 'mot de passe'));
 
-        // Détecter l'erreur sudoers spécifiquement
-        if (str_contains($output, 'password is required')
-            || str_contains($output, 'mot de passe')) {
+        if (!$sudoOk) {
             return new JsonResponse([
                 'ok'      => false,
-                'message' => 'Droits sudo manquants. Sur le serveur, exécutez : '
+                'message' => 'sudo non configuré pour www-data. Exécutez sur le serveur : '
                            . 'sudo visudo -f /etc/sudoers.d/comitemaore-vpn '
-                           . 'et vérifiez que la ligne www-data ALL=(ALL) NOPASSWD: '
-                           . self::SCRIPT_START . ' est présente sans backslash ni continuation.',
+                           . 'et ajoutez : www-data ALL=(ALL) NOPASSWD: ' . self::SCRIPT_START
+                           . ' — Détail : ' . trim($sudoTest ?? ''),
             ]);
         }
 
-        $ok = str_starts_with($output, 'OK:');
+        // Lancer le script
+        $cmd    = 'sudo ' . escapeshellarg(self::SCRIPT_START)
+                . ' ' . escapeshellarg($filepath) . ' 2>&1';
+        $output = trim(shell_exec($cmd) ?? '');
+        $ok     = str_starts_with($output, 'OK:');
+        $login  = $this->getUser()?->getUserIdentifier() ?? 'admin';
 
         $this->logService->log('vpn_lancer', $ok ? 'succes' : 'echec', 'assistance', null,
-            ['fichier' => $filename, 'output' => $output], null, $login);
+            ['fichier' => $filename, 'output' => $output, 'cmd' => $cmd], null, $login);
 
         return new JsonResponse([
             'ok'      => $ok,
