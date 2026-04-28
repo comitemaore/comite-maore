@@ -284,12 +284,15 @@ class FinanceController extends AbstractController
              FROM finance_adh WHERE id_adht = ?',
             [$idAdht]
         );
-
+        $cotisationsDues = [];
+        $historique = [];
         return $this->render('finance/show.html.twig', [
             'adherent'   => $adherent,
             'operations' => $operations,
             'soldes'     => $soldes,
             'is_admin'   => $this->isGranted('ROLE_ADMIN'),
+            'cotisations_dues' => $cotisationsDues,
+            'historique' => $historique,
         ]);
     }
 

@@ -33,7 +33,8 @@
                 💰 Fiche financière — {{ adherent.prenom_adht }} {{ adherent.nom_adht }}
             </h1>
 
-            <a href="{{ path('app_finance_operation', {'idAdht': adherent.id_adht}) }}"
+            {# <a href="{{ path('app_finance_operation', {'idAdht': adherent.id_adht}) }}" #}
+            <a href="{{ path('app_finance_show', {'idAdht': adherent.id_adht}) }}"
                class="btn btn-success">
                 + Nouvelle opération
             </a>
