@@ -35,6 +35,117 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
 
             {# ======================================================= #}
+            {# BLOC 2 — TICKET DE DÉPANNAGE                            #}
+            {# ======================================================= #}
+            <div class="card" style="border:1px solid rgba(229,62,62,.35);">
+
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+                    <span style="font-size:26px;">🎫</span>
+                    <div>
+                        <div style="font-weight:700;font-size:16px;color:#fc8181;">
+                            Ticket de dépannage
+                        </div>
+                        <div style="font-size:12px;opacity:.5;">
+                            Mail à l'administrateur technique + texte d'issue GitHub
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post" action="{{ path('app_assistance_ticket') }}">
+                    <input type="hidden" name="_token" value="{{ csrf_token('assistance_ticket') }}">
+
+                    {# Type #}
+                    <div style="display:flex;gap:6px;margin-bottom:14px;">
+                        {% for val, label in {'bug':'🐛 Bug','support':'❓ Support','feature':'✨ Amélioration'} %}
+                        <label id="lbl_{{ val }}" style="flex:1;display:flex;align-items:center;gap:5px;
+                               padding:7px 8px;border-radius:5px;cursor:pointer;font-size:12px;
+                               border:1px solid rgba(255,255,255,.15);">
+                            <input type="radio" name="type" value="{{ val }}"
+                                   {{ loop.first ? 'checked' : '' }}
+                                   onchange="selectType('{{ val }}')">
+                            {{ label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size:12px;">Urgence</label>
+                        <select name="urgence" class="form-control">
+                            <option value="normal">🟡 Normal</option>
+                            <option value="important">🟠 Important</option>
+                            <option value="bloquant">🔴 Bloquant</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size:12px;">Titre *</label>
+                        <input type="text" name="titre" class="form-control" required
+                               placeholder="ex: Impossible de se connecter...">
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size:12px;">Module concerné</label>
+                        <select name="module" class="form-control">
+                            <option value="">-- Choisir --</option>
+                            {% for m in ['Connexion','Adhérents','Organigramme','Finances',
+                                'Documents','Approbation','Import CSV','Admin BDD','Autre'] %}
+                                <option>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size:12px;">Description *</label>
+                        <textarea name="description" class="form-control" rows="3" required
+                                  placeholder="Décrivez le problème..."></textarea>
+                    </div>
+
+                    <div id="bug_fields">
+                        <div class="form-group">
+                            <label style="font-size:12px;">Étapes pour reproduire</label>
+                            <textarea name="reproduction" class="form-control" rows="2"
+                                      placeholder="1. Aller sur /adherent&#10;2. Cliquer...&#10;3. Erreur"></textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div class="form-group">
+                                <label style="font-size:12px;">Comportement attendu</label>
+                                <textarea name="attendu" class="form-control" rows="2"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-size:12px;">Comportement réel</label>
+                                <textarea name="reel" class="form-control" rows="2"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px;">Message d'erreur</label>
+                            <textarea name="erreur" class="form-control" rows="2"
+                                      style="font-family:monospace;font-size:11px;"
+                                      placeholder="Copiez le message d'erreur exact..."></textarea>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger"
+                            style="width:100%;padding:12px;font-size:14px;font-weight:600;"
+                            onclick="return confirm('Envoyer ce ticket au technicien ?');">
+                        🎫 Envoyer le ticket de dépannage
+                    </button>
+                </form>
+
+                {# Liens GitHub directs #}
+                <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);">
+                    <div style="font-size:11px;opacity:.5;margin-bottom:6px;">Ou créer une issue GitHub :</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=bug_report.md"
+                           target="_blank" class="btn btn-secondary btn-sm">🐛 Bug</a>
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=question_support.md"
+                           target="_blank" class="btn btn-secondary btn-sm">❓ Support</a>
+                        <a href="https://github.com/{{ github_repo }}/issues/new?template=feature_request.md"
+                           target="_blank" class="btn btn-secondary btn-sm">✨ Feature</a>
+                    </div>
+                </div>
+            </div>
+
+            {# ======================================================= #}
             {# BLOC 1 — PRISE EN MAIN À DISTANCE (OpenVPN)             #}
             {# ======================================================= #}
             <div class="card" style="border:1px solid rgba(66,153,225,.4);">
@@ -164,116 +275,7 @@
                 </div>
             </div>
 
-            {# ======================================================= #}
-            {# BLOC 2 — TICKET DE DÉPANNAGE                            #}
-            {# ======================================================= #}
-            <div class="card" style="border:1px solid rgba(229,62,62,.35);">
-
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-                    <span style="font-size:26px;">🎫</span>
-                    <div>
-                        <div style="font-weight:700;font-size:16px;color:#fc8181;">
-                            Ticket de dépannage
-                        </div>
-                        <div style="font-size:12px;opacity:.5;">
-                            Mail à l'administrateur technique + texte d'issue GitHub
-                        </div>
-                    </div>
-                </div>
-
-                <form method="post" action="{{ path('app_assistance_ticket') }}">
-                    <input type="hidden" name="_token" value="{{ csrf_token('assistance_ticket') }}">
-
-                    {# Type #}
-                    <div style="display:flex;gap:6px;margin-bottom:14px;">
-                        {% for val, label in {'bug':'🐛 Bug','support':'❓ Support','feature':'✨ Amélioration'} %}
-                        <label id="lbl_{{ val }}" style="flex:1;display:flex;align-items:center;gap:5px;
-                               padding:7px 8px;border-radius:5px;cursor:pointer;font-size:12px;
-                               border:1px solid rgba(255,255,255,.15);">
-                            <input type="radio" name="type" value="{{ val }}"
-                                   {{ loop.first ? 'checked' : '' }}
-                                   onchange="selectType('{{ val }}')">
-                            {{ label }}
-                        </label>
-                        {% endfor %}
-                    </div>
-
-                    <div class="form-group">
-                        <label style="font-size:12px;">Urgence</label>
-                        <select name="urgence" class="form-control">
-                            <option value="normal">🟡 Normal</option>
-                            <option value="important">🟠 Important</option>
-                            <option value="bloquant">🔴 Bloquant</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label style="font-size:12px;">Titre *</label>
-                        <input type="text" name="titre" class="form-control" required
-                               placeholder="ex: Impossible de se connecter...">
-                    </div>
-
-                    <div class="form-group">
-                        <label style="font-size:12px;">Module concerné</label>
-                        <select name="module" class="form-control">
-                            <option value="">-- Choisir --</option>
-                            {% for m in ['Connexion','Adhérents','Organigramme','Finances',
-                                'Documents','Approbation','Import CSV','Admin BDD','Autre'] %}
-                                <option>{{ m }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label style="font-size:12px;">Description *</label>
-                        <textarea name="description" class="form-control" rows="3" required
-                                  placeholder="Décrivez le problème..."></textarea>
-                    </div>
-
-                    <div id="bug_fields">
-                        <div class="form-group">
-                            <label style="font-size:12px;">Étapes pour reproduire</label>
-                            <textarea name="reproduction" class="form-control" rows="2"
-                                      placeholder="1. Aller sur /adherent&#10;2. Cliquer...&#10;3. Erreur"></textarea>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                            <div class="form-group">
-                                <label style="font-size:12px;">Comportement attendu</label>
-                                <textarea name="attendu" class="form-control" rows="2"></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label style="font-size:12px;">Comportement réel</label>
-                                <textarea name="reel" class="form-control" rows="2"></textarea>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px;">Message d'erreur</label>
-                            <textarea name="erreur" class="form-control" rows="2"
-                                      style="font-family:monospace;font-size:11px;"
-                                      placeholder="Copiez le message d'erreur exact..."></textarea>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-danger"
-                            style="width:100%;padding:12px;font-size:14px;font-weight:600;"
-                            onclick="return confirm('Envoyer ce ticket au technicien ?');">
-                        🎫 Envoyer le ticket de dépannage
-                    </button>
-                </form>
-
-                {# Liens GitHub directs #}
-                <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);">
-                    <div style="font-size:11px;opacity:.5;margin-bottom:6px;">Ou créer une issue GitHub :</div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <a href="https://github.com/{{ github_repo }}/issues/new?template=bug_report.md"
-                           target="_blank" class="btn btn-secondary btn-sm">🐛 Bug</a>
-                        <a href="https://github.com/{{ github_repo }}/issues/new?template=question_support.md"
-                           target="_blank" class="btn btn-secondary btn-sm">❓ Support</a>
-                        <a href="https://github.com/{{ github_repo }}/issues/new?template=feature_request.md"
-                           target="_blank" class="btn btn-secondary btn-sm">✨ Feature</a>
-                    </div>
-                </div>
-            </div>
+            
 
         </div>{# /grid #}
     </main>
