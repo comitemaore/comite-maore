@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         <span class="badge badge-admin">ADMIN</span>
@@ -82,28 +82,128 @@
             {% endfor %}
         </div>
 
-        {# ====== SECTIONS ====== #}
-        <h2 style="font-size:17px;font-weight:600;margin-bottom:12px;opacity:.8;">
-            Sections ({{ sections|length }})
-        </h2>
+        {# ====== FILTRE FÉDÉRATION + PAGINATION SECTIONS ====== #}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+            <h2 style="font-size:17px;font-weight:600;opacity:.8;margin:0;">
+                📍 Sections
+                <span style="font-size:13px;font-weight:400;opacity:.5;margin-left:6px;">
+                    {{ total }} au total · page {{ page }}/{{ total_pages }}
+                    {% if derniere_lettre %}
+                        · dernière : <strong>{{ derniere_lettre }}…</strong>
+                    {% endif %}
+                </span>
+            </h2>
+
+            {# Filtre fédération #}
+            <form method="get" action="{{ path('app_organigramme') }}"
+                  style="display:flex;align-items:center;gap:8px;">
+                <label style="font-size:12px;opacity:.6;">Fédération:</label>
+                <select name="federation" class="form-control" onchange="this.form.submit()"
+                        style="min-width:160px;">
+                    <option value="0" {{ federation_active == 0 ? 'selected' : '' }}>
+                        Toutes les fédérations
+                    </option>
+                    {% for fed in federations %}
+                        <option value="{{ fed.id_federation }}"
+                                {{ federation_active == fed.id_federation ? 'selected' : '' }}>
+                            {{ fed.federation }}
+                            {% if fed.nom_complet %}— {{ fed.nom_complet }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="page" value="1">
+            </form>
+        </div>
+
+        {% if sections|length == 0 %}
+            <div class="card">
+                <p style="opacity:.4;text-align:center;padding:20px;">
+                    Aucune section pour cette fédération.
+                </p>
+            </div>
+        {% else %}
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:16px;">
             {% for sec in sections %}
             <div class="card" style="border:1px solid rgba(104,211,145,.2);">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <div class="card-title" style="margin:0;color:#9ae6b4;">
-                        📍 {{ sec.section }}
-                        <span style="font-size:11px;opacity:.4;margin-left:6px;">#{{ sec.id_section }}</span>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div>
+                        <div class="card-title" style="margin:0;color:#9ae6b4;">
+                            📍 {{ sec.section }}
+                            <span style="font-size:11px;opacity:.4;margin-left:6px;">#{{ sec.id_section }}</span>
+                        </div>
+                        {% if sec.nom_federation %}
+                            <div style="font-size:11px;opacity:.4;margin-top:2px;">
+                                🏘 {{ sec.nom_federation }}
+                            </div>
+                        {% endif %}
                     </div>
-                    <a href="{{ path('app_organigramme_section', {id: sec.id_section}) }}"
-                       class="btn btn-sm"
-                       style="background:rgba(104,211,145,.15);color:#9ae6b4;border:1px solid rgba(104,211,145,.3);">
-                        ✏️
-                    </a>
+                    <div style="display:flex;gap:5px;">
+                        <a href="{{ path('app_fiche_section', {id: sec.id_section}) }}"
+                           class="btn btn-sm"
+                           style="background:rgba(255,255,255,.06);color:#a0aec0;border:1px solid rgba(255,255,255,.1);"
+                           title="Fiche">👁</a>
+                        <a href="{{ path('app_finance_section', {idSection: sec.id_section}) }}"
+                           class="btn btn-sm"
+                           style="background:rgba(104,211,145,.1);color:#9ae6b4;border:1px solid rgba(104,211,145,.2);"
+                           title="Finances">💰</a>
+                        <a href="{{ path('app_organigramme_section', {id: sec.id_section}) }}"
+                           class="btn btn-sm"
+                           style="background:rgba(104,211,145,.15);color:#9ae6b4;border:1px solid rgba(104,211,145,.3);"
+                           title="Modifier">✏️</a>
+                    </div>
                 </div>
                 {{ _self.fonctionsGrid(sec._noms, fonctions) }}
             </div>
             {% endfor %}
         </div>
+
+        {# Pagination sections #}
+        {% if total_pages > 1 %}
+        <div style="display:flex;justify-content:center;align-items:center;gap:6px;
+                    margin-top:20px;flex-wrap:wrap;">
+            {% if page > 1 %}
+                <a href="{{ path('app_organigramme', {federation: federation_active, page: page - 1}) }}"
+                   class="btn btn-secondary btn-sm">← Préc.</a>
+            {% endif %}
+
+            {% set start = max(1, page - 3) %}
+            {% set end   = min(total_pages, page + 3) %}
+
+            {% if start > 1 %}
+                <a href="{{ path('app_organigramme', {federation: federation_active, page: 1}) }}"
+                   class="btn btn-secondary btn-sm">1</a>
+                {% if start > 2 %}<span style="opacity:.4;">…</span>{% endif %}
+            {% endif %}
+
+            {% for p in start..end %}
+                <a href="{{ path('app_organigramme', {federation: federation_active, page: p}) }}"
+                   class="btn btn-sm {{ p == page ? 'btn-active' : 'btn-secondary' }}"
+                   style="{{ p == page ? 'background:#4299e1;color:#fff;' : '' }}">
+                    {{ p }}
+                </a>
+            {% endfor %}
+
+            {% if end < total_pages %}
+                {% if end < total_pages - 1 %}<span style="opacity:.4;">…</span>{% endif %}
+                <a href="{{ path('app_organigramme', {federation: federation_active, page: total_pages}) }}"
+                   class="btn btn-secondary btn-sm">{{ total_pages }}</a>
+            {% endif %}
+
+            {% if page < total_pages %}
+                <a href="{{ path('app_organigramme', {federation: federation_active, page: page + 1}) }}"
+                   class="btn btn-secondary btn-sm">Suiv. →</a>
+            {% endif %}
+
+            <span style="font-size:12px;opacity:.4;margin-left:8px;">
+                Page {{ page }}/{{ total_pages }} · {{ par_page }} sections par page
+                {% if derniere_lettre %}
+                    · fin de page : <strong style="color:#9ae6b4;">{{ derniere_lettre }}…</strong>
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
+        {% endif %}
+
     </main>
 </div>
 

@@ -1,0 +1,206 @@
+{# templates/search/index.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Recherche — Comité Maoré{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
+        {% else %}<span class="badge badge-user">USER</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_search') }}" class="active">🔍 Recherche</a>
+        {% if is_admin %}
+            <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">🔍 Recherche de données</h1>
+        <p style="font-size:13px;opacity:.6;margin-bottom:20px;">Consultation en lecture seule.</p>
+
+        {# FORMULAIRE #}
+        <div class="card">
+            <div class="card-title">Paramètres de recherche</div>
+            {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+            <form method="post" action="{{ path('app_search') }}" id="searchForm">
+                <input type="hidden" name="page" id="pageInput" value="1">
+
+                <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr 1fr;gap:12px;align-items:end;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Table</label>
+                        <select name="table" class="form-control" required>
+                            <option value="">-- Choisir --</option>
+                            {% for t in tables %}
+                                <option value="{{ t }}" {{ table == t ? 'selected' : '' }}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin:0;">
+                        <label>Colonne</label>
+                        <input type="text" name="column" class="form-control"
+                               value="{{ column ?? '*' }}" placeholder="* ou nom_col">
+                    </div>
+
+                    <div class="form-group" style="margin:0;">
+                        <label>Valeur recherchée
+                            <span style="font-size:11px;opacity:.45;font-weight:400;">
+                                (vide = afficher tout, équivalent à *)
+                            </span>
+                        </label>
+                        <input type="text" name="value" class="form-control"
+                               value="{{ value ?? '' }}"
+                               placeholder="Vide = * (tout afficher)">
+                    </div>
+
+                    <div class="form-group" style="margin:0;">
+                        <label>Résultats / page</label>
+                        <select name="limite" class="form-control" onchange="document.getElementById('pageInput').value=1;">
+                            {% for opt in limite_options %}
+                                {% if opt == 0 and not is_admin %}
+                                    {# Sans limite : admin uniquement #}
+                                {% else %}
+                                    <option value="{{ opt }}" {{ (limite ?? 100) == opt ? 'selected' : '' }}>
+                                        {{ opt == 0 ? 'Sans limite (admin)' : opt }}
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div style="padding-bottom:1px;">
+                        <button type="submit" class="btn btn-primary" style="width:100%;">🔍 Chercher</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {# RÉSULTATS #}
+        {% if results is defined and results|length > 0 %}
+        <div class="card" style="padding:0;overflow:hidden;">
+
+            {# En-tête résultats #}
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
+                <div style="font-size:14px;font-weight:600;">
+                    Résultats
+                    {% if total_count is not null %}
+                        <span style="font-size:13px;font-weight:400;opacity:.6;margin-left:6px;">
+                            {{ results|length }} affichés
+                            {% if total_count > results|length %}
+                                sur {{ total_count }} au total
+                            {% endif %}
+                            {% if limite > 0 and total_pages > 1 %}
+                                — page {{ page }}/{{ total_pages }}
+                            {% endif %}
+                        </span>
+                    {% endif %}
+                </div>
+                {% if total_count is not null %}
+                    <span style="font-size:12px;opacity:.4;">{{ total_count }} enregistrement(s) dans la table</span>
+                {% endif %}
+            </div>
+
+            {# Tableau #}
+            <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            {% for col in results[0]|keys %}
+                                <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in results %}
+                        <tr>
+                            {% for cell in row %}
+                                <td>{{ cell is null ? '—' : cell }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# PAGINATION #}
+            {% if total_pages > 1 %}
+            <div style="display:flex;justify-content:center;align-items:center;gap:6px;padding:16px;flex-wrap:wrap;">
+                {# Précédent #}
+                {% if page > 1 %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="goToPage({{ page - 1 }})">← Préc.</button>
+                {% endif %}
+
+                {# Pages #}
+                {% set start = max(1, page - 3) %}
+                {% set end   = min(total_pages, page + 3) %}
+
+                {% if start > 1 %}
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="goToPage(1)">1</button>
+                    {% if start > 2 %}<span style="opacity:.4;">…</span>{% endif %}
+                {% endif %}
+
+                {% for p in start..end %}
+                    <button type="button"
+                            class="btn btn-sm {{ p == page ? 'btn-primary' : 'btn-secondary' }}"
+                            onclick="goToPage({{ p }})">{{ p }}</button>
+                {% endfor %}
+
+                {% if end < total_pages %}
+                    {% if end < total_pages - 1 %}<span style="opacity:.4;">…</span>{% endif %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="goToPage({{ total_pages }})">{{ total_pages }}</button>
+                {% endif %}
+
+                {# Suivant #}
+                {% if page < total_pages %}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="goToPage({{ page + 1 }})">Suiv. →</button>
+                {% endif %}
+
+                <span style="font-size:12px;opacity:.4;margin-left:8px;">
+                    Page {{ page }} / {{ total_pages }}
+                </span>
+            </div>
+            {% endif %}
+
+        </div>
+
+        {% elseif results is defined and results|length == 0 and table %}
+            <div class="card">
+                <p class="empty-state">Aucun résultat trouvé pour cette recherche.</p>
+            </div>
+        {% endif %}
+    </main>
+</div>
+
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+    body.theme-dark .btn-primary:hover { background:#3182ce; }
+    body.theme-sky  .btn-primary:hover { background:#2c5282; }
+</style>
+
+<script>
+function goToPage(p) {
+    document.getElementById('pageInput').value = p;
+    document.getElementById('searchForm').submit();
+}
+</script>
+{% endblock %}

@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
@@ -30,21 +30,55 @@
     </aside>
 
     <main class="main-content">
-        <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">🔍 Recherche de données</h1>
-        <p style="font-size:13px;opacity:.6;margin-bottom:20px;">Consultation en lecture seule.</p>
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">🔍 Recherche</h1>
+        <p style="font-size:13px;opacity:.5;margin-bottom:20px;">
+            Recherche globale instantanée ou recherche avancée dans une table.
+        </p>
 
-        {# FORMULAIRE #}
+        {# ============================================================ #}
+        {# BARRE DE RECHERCHE GLOBALE (avec autocomplétion)             #}
+        {# ============================================================ #}
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-title">🔎 Recherche globale</div>
+            <p style="font-size:12px;opacity:.5;margin-bottom:12px;">
+                Cherche simultanément dans les adhérents (nom, prénom, NIN, email),
+                les sections et les fédérations.
+            </p>
+            <div style="position:relative;max-width:560px;">
+                <input type="text" id="globalSearch" class="form-control"
+                       placeholder="Nom, prénom, NIN, email, section, fédération..."
+                       autocomplete="off"
+                       style="padding-right:40px;"
+                       oninput="rechercheGlobale(this.value)">
+                <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+                             opacity:.4;pointer-events:none;">🔍</span>
+
+                {# Dropdown suggestions #}
+                <div id="globalSuggestions"
+                     style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+                            background:#1e2535;border:1px solid rgba(255,255,255,.15);border-radius:8px;
+                            box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:1000;max-height:380px;overflow-y:auto;">
+                </div>
+            </div>
+            <div id="globalResultats" style="margin-top:12px;"></div>
+        </div>
+
+        {# ============================================================ #}
+        {# RECHERCHE AVANCÉE PAR TABLE                                  #}
+        {# ============================================================ #}
         <div class="card">
-            <div class="card-title">Paramètres de recherche</div>
+            <div class="card-title">⚙️ Recherche avancée par table</div>
             {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 
             <form method="post" action="{{ path('app_search') }}" id="searchForm">
                 <input type="hidden" name="page" id="pageInput" value="1">
 
                 <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr 1fr;gap:12px;align-items:end;">
+
                     <div class="form-group" style="margin:0;">
-                        <label>Table</label>
-                        <select name="table" class="form-control" required>
+                        <label style="font-size:12px;">Table</label>
+                        <select name="table" id="tableSelect" class="form-control" required
+                                onchange="chargerColonnes(this.value)">
                             <option value="">-- Choisir --</option>
                             {% for t in tables %}
                                 <option value="{{ t }}" {{ table == t ? 'selected' : '' }}>{{ t }}</option>
@@ -53,154 +87,333 @@
                     </div>
 
                     <div class="form-group" style="margin:0;">
-                        <label>Colonne</label>
-                        <input type="text" name="column" class="form-control"
-                               value="{{ column ?? '*' }}" placeholder="* ou nom_col">
+                        <label style="font-size:12px;">Colonne</label>
+                        <select name="column" id="columnSelect" class="form-control">
+                            <option value="*">* (toutes)</option>
+                            {% for col in colonnes %}
+                                <option value="{{ col }}" {{ column == col ? 'selected' : '' }}>
+                                    {{ col }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </div>
 
-                    <div class="form-group" style="margin:0;">
-                        <label>Valeur recherchée
-                            <span style="font-size:11px;opacity:.45;font-weight:400;">
-                                (vide = afficher tout, équivalent à *)
-                            </span>
+                    <div class="form-group" style="margin:0;position:relative;">
+                        <label style="font-size:12px;">
+                            Valeur
+                            <span style="opacity:.4;">(vide = tout afficher)</span>
                         </label>
-                        <input type="text" name="value" class="form-control"
-                               value="{{ value ?? '' }}"
-                               placeholder="Vide = * (tout afficher)">
+                        <input type="text" name="value" id="valueInput" class="form-control"
+                               value="{{ value }}"
+                               placeholder="Vide = * (tout afficher)"
+                               autocomplete="off"
+                               oninput="autocompletChamp(this.value)">
+                        <div id="champSuggestions"
+                             style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;
+                                    background:#1e2535;border:1px solid rgba(255,255,255,.15);
+                                    border-radius:6px;z-index:100;max-height:200px;overflow-y:auto;
+                                    box-shadow:0 6px 20px rgba(0,0,0,.4);">
+                        </div>
                     </div>
 
                     <div class="form-group" style="margin:0;">
-                        <label>Résultats / page</label>
-                        <select name="limite" class="form-control" onchange="document.getElementById('pageInput').value=1;">
+                        <label style="font-size:12px;">Par page</label>
+                        <select name="limite" class="form-control"
+                                onchange="document.getElementById('pageInput').value=1;">
                             {% for opt in limite_options %}
-                                {% if opt == 0 and not is_admin %}
-                                    {# Sans limite : admin uniquement #}
-                                {% else %}
-                                    <option value="{{ opt }}" {{ (limite ?? 100) == opt ? 'selected' : '' }}>
-                                        {{ opt == 0 ? 'Sans limite (admin)' : opt }}
-                                    </option>
+                                {% if opt == 0 and not is_admin %}{% else %}
+                                <option value="{{ opt }}" {{ limite == opt ? 'selected' : '' }}>
+                                    {{ opt == 0 ? 'Sans limite' : opt }}
+                                </option>
                                 {% endif %}
                             {% endfor %}
                         </select>
                     </div>
 
-                    <div style="padding-bottom:1px;">
-                        <button type="submit" class="btn btn-primary" style="width:100%;">🔍 Chercher</button>
+                    <div>
+                        <button type="submit" class="btn btn-primary" style="width:100%;">
+                            🔍 Chercher
+                        </button>
                     </div>
                 </div>
             </form>
         </div>
 
-        {# RÉSULTATS #}
+        {# Résultats #}
         {% if results is defined and results|length > 0 %}
-        <div class="card" style="padding:0;overflow:hidden;">
-
-            {# En-tête résultats #}
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
+        <div class="card" style="padding:0;overflow:hidden;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
                 <div style="font-size:14px;font-weight:600;">
                     Résultats
-                    {% if total_count is not null %}
-                        <span style="font-size:13px;font-weight:400;opacity:.6;margin-left:6px;">
-                            {{ results|length }} affichés
-                            {% if total_count > results|length %}
-                                sur {{ total_count }} au total
-                            {% endif %}
-                            {% if limite > 0 and total_pages > 1 %}
-                                — page {{ page }}/{{ total_pages }}
-                            {% endif %}
-                        </span>
-                    {% endif %}
+                    <span style="font-size:13px;font-weight:400;opacity:.5;margin-left:6px;">
+                        {{ results|length }} affiché(s)
+                        {% if total_count > results|length %}sur {{ total_count }}{% endif %}
+                        {% if total_pages > 1 %}— page {{ page }}/{{ total_pages }}{% endif %}
+                    </span>
                 </div>
-                {% if total_count is not null %}
-                    <span style="font-size:12px;opacity:.4;">{{ total_count }} enregistrement(s) dans la table</span>
-                {% endif %}
+                <span style="font-size:12px;opacity:.4;">{{ total_count }} enregistrement(s)</span>
             </div>
-
-            {# Tableau #}
             <div style="overflow-x:auto;">
                 <table class="table">
                     <thead>
                         <tr>
                             {% for col in results[0]|keys %}
-                                <th>{{ col }}</th>
+                                {% if col != '_liens' %}
+                                    <th>{{ col }}</th>
+                                {% endif %}
                             {% endfor %}
+                            <th style="text-align:center;opacity:.5;">Accès</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in results %}
+                        {% set liens = row._liens ?? {} %}
                         <tr>
-                            {% for cell in row %}
-                                <td>{{ cell is null ? '—' : cell }}</td>
+                            {% for col, cell in row %}
+                                {% if col != '_liens' %}
+                                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        {{ cell is null ? '—' : cell }}
+                                    </td>
+                                {% endif %}
                             {% endfor %}
+                            <td style="white-space:nowrap;text-align:center;">
+                                {% if liens.fiche %}
+                                    <a href="{{ liens.fiche }}"
+                                       class="btn btn-secondary btn-sm"
+                                       title="Voir la fiche">👁</a>
+                                {% endif %}
+                                {% if liens.finance %}
+                                    <a href="{{ liens.finance }}"
+                                       class="btn btn-sm"
+                                       style="background:rgba(104,211,145,.15);color:#9ae6b4;
+                                              border:1px solid rgba(104,211,145,.25);"
+                                       title="État financier">💰</a>
+                                {% endif %}
+                                {% if not liens.fiche and not liens.finance %}
+                                    <span style="opacity:.25;font-size:11px;">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
 
-            {# PAGINATION #}
+            {# Pagination #}
             {% if total_pages > 1 %}
-            <div style="display:flex;justify-content:center;align-items:center;gap:6px;padding:16px;flex-wrap:wrap;">
-                {# Précédent #}
+            <div style="display:flex;justify-content:center;gap:6px;padding:14px;flex-wrap:wrap;">
                 {% if page > 1 %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="goToPage({{ page - 1 }})">← Préc.</button>
+                    <button class="btn btn-secondary btn-sm" onclick="goToPage({{ page - 1 }})">← Préc.</button>
                 {% endif %}
-
-                {# Pages #}
                 {% set start = max(1, page - 3) %}
                 {% set end   = min(total_pages, page + 3) %}
-
                 {% if start > 1 %}
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="goToPage(1)">1</button>
+                    <button class="btn btn-secondary btn-sm" onclick="goToPage(1)">1</button>
                     {% if start > 2 %}<span style="opacity:.4;">…</span>{% endif %}
                 {% endif %}
-
                 {% for p in start..end %}
-                    <button type="button"
-                            class="btn btn-sm {{ p == page ? 'btn-primary' : 'btn-secondary' }}"
+                    <button class="btn btn-sm {{ p == page ? 'btn-primary' : 'btn-secondary' }}"
                             onclick="goToPage({{ p }})">{{ p }}</button>
                 {% endfor %}
-
                 {% if end < total_pages %}
                     {% if end < total_pages - 1 %}<span style="opacity:.4;">…</span>{% endif %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="goToPage({{ total_pages }})">{{ total_pages }}</button>
+                    <button class="btn btn-secondary btn-sm" onclick="goToPage({{ total_pages }})">{{ total_pages }}</button>
                 {% endif %}
-
-                {# Suivant #}
                 {% if page < total_pages %}
-                    <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="goToPage({{ page + 1 }})">Suiv. →</button>
+                    <button class="btn btn-secondary btn-sm" onclick="goToPage({{ page + 1 }})">Suiv. →</button>
                 {% endif %}
-
-                <span style="font-size:12px;opacity:.4;margin-left:8px;">
-                    Page {{ page }} / {{ total_pages }}
-                </span>
             </div>
             {% endif %}
-
         </div>
 
-        {% elseif results is defined and results|length == 0 and table %}
-            <div class="card">
-                <p class="empty-state">Aucun résultat trouvé pour cette recherche.</p>
+        {% elseif results is defined and table %}
+            <div class="card" style="margin-top:16px;">
+                <p style="opacity:.4;text-align:center;padding:16px;">Aucun résultat.</p>
             </div>
         {% endif %}
+
     </main>
 </div>
 
 <style>
     body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
     body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
-    body.theme-dark .btn-primary:hover { background:#3182ce; }
-    body.theme-sky  .btn-primary:hover { background:#2c5282; }
+    .suggestion-item {
+        padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);
+        font-size:13px;transition:background .1s;
+    }
+    .suggestion-item:hover { background:rgba(255,255,255,.08); }
+    .suggestion-item:last-child { border-bottom:none; }
+    .suggestion-categorie {
+        padding:6px 14px 4px;font-size:10px;font-weight:700;
+        text-transform:uppercase;letter-spacing:.06em;opacity:.4;
+        background:rgba(0,0,0,.2);
+    }
+    .suggestion-label { font-size:13px; }
+    .suggestion-meta  { font-size:11px;opacity:.45;margin-top:2px; }
+    mark { background:rgba(66,153,225,.3);color:inherit;border-radius:2px;padding:0 2px; }
 </style>
 
 <script>
+const AUTOCOMPLETE_URL = '{{ path("app_search_autocomplete") }}';
+const COLONNES_URL     = '{{ path("app_search_colonnes", {table: "__TABLE__"}) }}';
+let timerGlobal, timerChamp;
+
+// ---- Pagination ----
 function goToPage(p) {
     document.getElementById('pageInput').value = p;
     document.getElementById('searchForm').submit();
 }
+
+// ---- Charger colonnes dynamiquement quand table change ----
+async function chargerColonnes(table) {
+    const sel = document.getElementById('columnSelect');
+    sel.innerHTML = '<option value="*">* (toutes)</option>';
+    if (!table) return;
+
+    try {
+        const url  = COLONNES_URL.replace('__TABLE__', encodeURIComponent(table));
+        const resp = await fetch(url);
+        const cols = await resp.json();
+        cols.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value       = c.nom;
+            opt.textContent = c.nom + ' (' + c.type + ')';
+            sel.appendChild(opt);
+        });
+    } catch(e) {}
+
+    // Réinitialiser le champ valeur et fermer suggestions
+    document.getElementById('valueInput').value = '';
+    fermerSuggestions('champSuggestions');
+}
+
+// ---- Autocomplétion champ valeur (table sélectionnée) ----
+function autocompletChamp(val) {
+    clearTimeout(timerChamp);
+    fermerSuggestions('champSuggestions');
+    if (val.length < 2) return;
+
+    const table = document.getElementById('tableSelect').value;
+    const col   = document.getElementById('columnSelect').value;
+
+    timerChamp = setTimeout(async () => {
+        try {
+            const resp = await fetch(
+                AUTOCOMPLETE_URL + '?q=' + encodeURIComponent(val)
+                + '&table=' + encodeURIComponent(table)
+            );
+            const data = await resp.json();
+            afficherSuggestionsChamp(data, val);
+        } catch(e) {}
+    }, 250);
+}
+
+function afficherSuggestionsChamp(items, q) {
+    const box = document.getElementById('champSuggestions');
+    if (!items.length) { box.style.display = 'none'; return; }
+
+    box.innerHTML = items.map(item =>
+        `<div class="suggestion-item" onclick="selectionnerValeur('${escHtml(item.valeur)}')">
+            <div class="suggestion-label">${surligner(escHtml(item.valeur), q)}</div>
+            <div class="suggestion-meta">col: ${escHtml(item.colonne)}</div>
+        </div>`
+    ).join('');
+    box.style.display = 'block';
+}
+
+function selectionnerValeur(val) {
+    document.getElementById('valueInput').value = val;
+    fermerSuggestions('champSuggestions');
+}
+
+// ---- Recherche globale (toutes tables) ----
+function rechercheGlobale(val) {
+    clearTimeout(timerGlobal);
+    fermerSuggestions('globalSuggestions');
+    document.getElementById('globalResultats').innerHTML = '';
+    if (val.length < 2) return;
+
+    timerGlobal = setTimeout(async () => {
+        try {
+            const resp = await fetch(AUTOCOMPLETE_URL + '?q=' + encodeURIComponent(val));
+            const data = await resp.json();
+            afficherSuggestionsGlobal(data, val);
+        } catch(e) {}
+    }, 200);
+}
+
+function afficherSuggestionsGlobal(items, q) {
+    const box = document.getElementById('globalSuggestions');
+    if (!items.length) {
+        box.innerHTML = '<div style="padding:14px;opacity:.4;text-align:center;font-size:13px;">Aucun résultat pour « ' + escHtml(q) + ' »</div>';
+        box.style.display = 'block';
+        return;
+    }
+
+    // Grouper par catégorie
+    const grouped = {};
+    items.forEach(item => {
+        const cat = item.categorie || item.table || 'Autres';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item);
+    });
+
+    let html = '';
+    for (const [cat, list] of Object.entries(grouped)) {
+        html += `<div class="suggestion-categorie">${escHtml(cat)}</div>`;
+        html += list.map(item => {
+            const lien = item.lien || null;
+            const click = lien
+                ? `window.location.href='${lien}'`
+                : `remplirRecherche('${escHtml(item.table)}','${escHtml(item.colonne)}','${escHtml(item.valeur)}')`;
+            return `<div class="suggestion-item" onclick="${click}">
+                <div class="suggestion-label">${surligner(escHtml(item.label), q)}</div>
+            </div>`;
+        }).join('');
+    }
+
+    box.innerHTML = html;
+    box.style.display = 'block';
+}
+
+function remplirRecherche(table, colonne, valeur) {
+    fermerSuggestions('globalSuggestions');
+    document.getElementById('globalSearch').value = valeur;
+    // Remplir le formulaire avancé et soumettre
+    const sel = document.getElementById('tableSelect');
+    sel.value = table;
+    chargerColonnes(table).then(() => {
+        setTimeout(() => {
+            const cs = document.getElementById('columnSelect');
+            for (let o of cs.options) { if (o.value === colonne) { cs.value = colonne; break; } }
+            document.getElementById('valueInput').value = valeur;
+            document.getElementById('searchForm').submit();
+        }, 400);
+    });
+}
+
+// ---- Utilitaires ----
+function fermerSuggestions(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function surligner(texte, q) {
+    if (!q) return texte;
+    const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+    return texte.replace(re, '<mark>$1</mark>');
+}
+
+// Fermer les suggestions en cliquant ailleurs
+document.addEventListener('click', e => {
+    if (!e.target.closest('#globalSearch') && !e.target.closest('#globalSuggestions'))
+        fermerSuggestions('globalSuggestions');
+    if (!e.target.closest('#valueInput') && !e.target.closest('#champSuggestions'))
+        fermerSuggestions('champSuggestions');
+});
 </script>
 {% endblock %}

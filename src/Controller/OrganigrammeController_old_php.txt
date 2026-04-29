@@ -34,74 +34,24 @@ class OrganigrammeController extends AbstractController
     ) {}
 
     // ------------------------------------------------------------------
-    // PAGE PRINCIPALE — filtrage par fédération + pagination 20/page
+    // PAGE PRINCIPALE — vue d'ensemble des 3 niveaux
     // ------------------------------------------------------------------
     #[Route('', name: 'app_organigramme')]
-    public function index(Request $request): Response
+    public function index(): Response
     {
-        $idFederation = $request->query->getInt('federation', 0);
-        $page         = max(1, $request->query->getInt('page', 1));
-        $parPage      = 20;
-
-        // Toutes les fédérations pour le filtre
+        $sections    = $this->sectionsAvecNoms();
         $federations = $this->federationsAvecNoms();
-
-        // Requête sections filtrée par fédération
-        $qb = $this->connection->createQueryBuilder()
-            ->select('s.*', 'f.federation AS nom_federation', 'f.id_federation')
-            ->from('comitemaore_sections', 's')
-            ->leftJoin('s', 'comitemaore_federations', 'f', 's.id_federation = f.id_federation')
-            ->orderBy('f.federation', 'ASC')
-            ->addOrderBy('s.section', 'ASC');
-
-        if ($idFederation > 0) {
-            $qb->where('s.id_federation = :fed')
-               ->setParameter('fed', $idFederation);
-        }
-
-        // Compter le total
-        $qbCount = clone $qb;
-        $total   = (int) $qbCount->select('COUNT(*)')->fetchOne();
-
-        // Paginer
-        $offset    = ($page - 1) * $parPage;
-        $sections  = $qb->select('s.*', 'f.federation AS nom_federation', 'f.id_federation')
-                         ->setFirstResult($offset)
-                         ->setMaxResults($parPage)
-                         ->fetchAllAssociative();
-
-        $totalPages = (int) ceil($total / $parPage);
-
-        // Résoudre les noms des membres pour chaque section
-        $sectionsAvecNoms = array_map(function(array $sec): array {
-            $sec['_noms'] = $this->resolveNoms($sec);
-            return $sec;
-        }, $sections);
-
-        // Première lettre du dernier bureau de la page (indicatif)
-        $derniereSection     = !empty($sections) ? end($sections) : null;
-        $premiereLettreDern  = $derniereSection
-            ? strtoupper(mb_substr($derniereSection['section'], 0, 1))
-            : null;
-
-        // Bureau national
-        $bureau     = $this->connection->fetchAssociative(
+        $bureau      = $this->connection->fetchAssociative(
             'SELECT * FROM comitemaore_burexecnat WHERE actif = 1 ORDER BY annee_mandat DESC LIMIT 1'
         ) ?: [];
-        $bureauNoms = $bureau ? $this->resolveNoms($bureau) : [];
+        $bureauNoms  = $bureau ? $this->resolveNoms($bureau) : [];
 
         return $this->render('organigramme/index.html.twig', [
-            'sections'           => $sectionsAvecNoms,
-            'federations'        => $federations,
-            'federation_active'  => $idFederation,
-            'bureau'             => $bureau,
-            'bureauNoms'         => $bureauNoms,
-            'fonctions'          => self::FONCTIONS,
-            'page'               => $page,
-            'total_pages'        => $totalPages,
-            'total'              => $total,
-            'par_page'           => $parPage,
-            'derniere_lettre'    => $premiereLettreDern,
+            'sections'    => $sections,
+            'federations' => $federations,
+            'bureau'      => $bureau,
+            'bureauNoms'  => $bureauNoms,
+            'fonctions'   => self::FONCTIONS,
         ]);
     }
 
