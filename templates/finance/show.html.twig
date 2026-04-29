@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
     <div class="navbar-right">
         <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
         {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
@@ -292,7 +292,7 @@
                     </span>
                 </span>
                 {% if is_admin %}
-                <a href="{{ path('app_finance_operation', {idAdht: adherent.id_adht}) }}"
+                <a href="{{ path('app_finance_show', {idAdht: adherent.id_adht}) }}"
                    class="btn btn-success btn-sm">+ Opération</a>
                 {% endif %}
             </div>
