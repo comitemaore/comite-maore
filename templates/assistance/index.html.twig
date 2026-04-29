@@ -276,7 +276,30 @@
                 </div>
             </div>
 
-            
+            {# Infos système pour le technicien #}
+                <div class="card" style="margin-top:12px;padding:14px 16px;">
+                    <div style="font-size:12px;font-weight:600;margin-bottom:8px;opacity:.7;">
+                        Informations système (à communiquer au technicien)
+                    </div>
+                    <table style="width:100%;font-size:12px;">
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;width:40%;">Serveur PHP</td>
+                            <td>{{ constant('PHP_VERSION') }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Environnement</td>
+                            <td>{{ app.environment }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Utilisateur connecté</td>
+                            <td>{{ app.user.userIdentifier }}</td>
+                        </tr>
+                        <tr>
+                            <td style="opacity:.5;padding:3px 0;">Date/heure serveur</td>
+                            <td>{{ "now"|date("d/m/Y H:i:s") }}</td>
+                        </tr>
+                    </table>
+                </div>
 
         </div>{# /grid #}
     </main>
