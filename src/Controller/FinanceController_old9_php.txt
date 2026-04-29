@@ -19,206 +19,353 @@ class FinanceController extends AbstractController
         private readonly LogService $logService,
     ) {}
 
-    private function currentAdherent(): ?array
-    {
-        $login = $this->getUser()?->getUserIdentifier();
-        return $login ? ($this->connection->fetchAssociative(
-            'SELECT * FROM comitemaore_adherent WHERE login_adht = ?', [$login]
-        ) ?: null) : null;
-    }
-
     // ------------------------------------------------------------------
-    // Fiche financière d'un adhérent
+    // ÉTAT FINANCIER D'UNE SECTION
     // ------------------------------------------------------------------
-    #[Route('/{idAdht}', name: 'app_finance_show', methods: ['GET'], requirements: ['idAdht' => '\d+'])]
-    public function show(int $idAdht): Response
+    #[Route('/section/{idSection}', name: 'app_finance_section', methods: ['GET'])]
+    public function section(int $idSection, Request $request): Response
     {
-        $adherent = $this->connection->fetchAssociative(
-            'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$idAdht]
-        );
-        if (!$adherent) throw $this->createNotFoundException();
+        $annee = (int) $request->query->get('annee', date('Y'));
 
-        // Historique complet
-        $historique = $this->connection->fetchAllAssociative(
-            'SELECT * FROM finance_adh WHERE id_adht = ? ORDER BY date_operation DESC', [$idAdht]
+        $section = $this->connection->fetchAssociative(
+            'SELECT s.*, f.federation AS nom_federation
+             FROM comitemaore_sections s
+             LEFT JOIN comitemaore_federations f ON s.id_federation = f.id_federation
+             WHERE s.id_section = ?',
+            [$idSection]
         );
-        // Cotisations dues non soldées
-        $cotisationsDues = $this->connection->fetchAllAssociative(
-            "SELECT * FROM comitemaore_cotisation_due
-             WHERE id_adht = ? AND statut != 'soldee'
-             ORDER BY annee DESC", [$idAdht]
+        if (!$section) throw $this->createNotFoundException("Section #$idSection introuvable.");
+
+        // Soldes agrégés depuis tab_finance
+        $soldes = $this->connection->fetchAssociative(
+            'SELECT
+                SUM(fin_total_cotis)  AS total_cotis,
+                SUM(fin_total_dons)   AS total_dons,
+                SUM(fin_cotis_dues)   AS total_dues,
+                SUM(fin_ristourne)    AS total_ristourne,
+                SUM(fin_sectcorresp)  AS total_section,
+                SUM(fin_fedcorresp)   AS total_fed,
+                SUM(fin_burnatexec)   AS total_ben
+             FROM tab_finance
+             WHERE id_section = ? AND annee_finance = ?',
+            [$idSection, $annee]
         );
 
-        $current = $this->currentAdherent();
-        $this->logService->log('view_finance', 'info', 'finance', $idAdht,
-            [], $current['id_adht'] ?? null, $current['login_adht'] ?? null);
+        // Historique des opérations de la section
+        $operations = $this->connection->fetchAllAssociative(
+            'SELECT f.*, a.nom_adht, a.prenom_adht, a.NIN_adh
+             FROM finance_adh f
+             LEFT JOIN comitemaore_adherent a ON f.id_adht = a.id_adht
+             WHERE f.id_section = ?
+               AND (? = 0 OR f.annee_cotisation = ?)
+             ORDER BY f.date_operation DESC
+             LIMIT 200',
+            [$idSection, $annee, $annee]
+        );
 
-        return $this->render('finance/show.html.twig', [
-            'adherent'        => $adherent,
-            'historique'      => $historique,
-            'cotisations_dues'=> $cotisationsDues,
-            'is_admin'        => $this->isGranted('ROLE_ADMIN'),
-            'current'         => $current,
+        // Résumé par type d'opération
+        $parType = $this->connection->fetchAllAssociative(
+            'SELECT type_operation,
+                    COUNT(*)        AS nb,
+                    SUM(montant)    AS total,
+                    SUM(montant_sectcorresp) AS part_section
+             FROM finance_adh
+             WHERE id_section = ?
+               AND (? = 0 OR annee_cotisation = ?)
+             GROUP BY type_operation
+             ORDER BY total DESC',
+            [$idSection, $annee, $annee]
+        );
+
+        $annees = $this->getAnnees('section', $idSection);
+
+        return $this->render('finance/section.html.twig', [
+            'section'    => $section,
+            'soldes'     => $soldes,
+            'operations' => $operations,
+            'par_type'   => $parType,
+            'annee'      => $annee,
+            'annees'     => $annees,
+            'is_admin'   => $this->isGranted('ROLE_ADMIN'),
         ]);
     }
 
     // ------------------------------------------------------------------
-    // Formulaire opération financière
+    // ÉTAT FINANCIER D'UNE FÉDÉRATION
     // ------------------------------------------------------------------
-    #[Route('/{idAdht}/operation', name: 'app_finance_operation', methods: ['GET', 'POST'], requirements: ['idAdht' => '\d+'])]
-    public function operation(int $idAdht, Request $request): Response
+    #[Route('/federation/{idFederation}', name: 'app_finance_federation', methods: ['GET'])]
+    public function federation(int $idFederation, Request $request): Response
+    {
+        $annee = (int) $request->query->get('annee', date('Y'));
+
+        $federation = $this->connection->fetchAssociative(
+            'SELECT * FROM comitemaore_federations WHERE id_federation = ?',
+            [$idFederation]
+        );
+        if (!$federation) throw $this->createNotFoundException("Fédération #$idFederation introuvable.");
+
+        // Soldes agrégés de toutes les sections de la fédération
+        $soldes = $this->connection->fetchAssociative(
+            'SELECT
+                SUM(fin_total_cotis)  AS total_cotis,
+                SUM(fin_total_dons)   AS total_dons,
+                SUM(fin_cotis_dues)   AS total_dues,
+                SUM(fin_ristourne)    AS total_ristourne,
+                SUM(fin_sectcorresp)  AS total_sections,
+                SUM(fin_fedcorresp)   AS total_fed,
+                SUM(fin_burnatexec)   AS total_ben
+             FROM tab_finance
+             WHERE id_federation = ? AND annee_finance = ?',
+            [$idFederation, $annee]
+        );
+
+        // Part fédération = somme des 30% collectés par toutes ses sections
+        $partFederation = $soldes['total_fed'] ?? 0;
+
+        // Détail par section
+        $parSection = $this->connection->fetchAllAssociative(
+            'SELECT tf.*, s.section AS nom_section
+             FROM tab_finance tf
+             LEFT JOIN comitemaore_sections s ON tf.id_section = s.id_section
+             WHERE tf.id_federation = ? AND tf.annee_finance = ?
+             ORDER BY tf.fin_fedcorresp DESC',
+            [$idFederation, $annee]
+        );
+
+        // Historique des opérations de toutes les sections de la fédération
+        $operations = $this->connection->fetchAllAssociative(
+            'SELECT f.*, a.nom_adht, a.prenom_adht, a.NIN_adh,
+                    s.section AS nom_section
+             FROM finance_adh f
+             LEFT JOIN comitemaore_adherent a ON f.id_adht = a.id_adht
+             LEFT JOIN comitemaore_sections s ON f.id_section = s.id_section
+             WHERE s.id_federation = ?
+               AND (? = 0 OR f.annee_cotisation = ?)
+             ORDER BY f.date_operation DESC
+             LIMIT 200',
+            [$idFederation, $annee, $annee]
+        );
+
+        $annees = $this->getAnnees('federation', $idFederation);
+
+        return $this->render('finance/federation.html.twig', [
+            'federation'     => $federation,
+            'soldes'         => $soldes,
+            'part_federation'=> $partFederation,
+            'par_section'    => $parSection,
+            'operations'     => $operations,
+            'annee'          => $annee,
+            'annees'         => $annees,
+            'is_admin'       => $this->isGranted('ROLE_ADMIN'),
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // ÉTAT FINANCIER DU BUREAU EXÉCUTIF NATIONAL (ensemble)
+    // ------------------------------------------------------------------
+    #[Route('/bureau-national', name: 'app_finance_ben', methods: ['GET'])]
+    public function bureauNational(Request $request): Response
+    {
+        $annee = (int) $request->query->get('annee', date('Y'));
+
+        // Totaux globaux toutes sections confondues
+        $totaux = $this->connection->fetchAssociative(
+            'SELECT
+                COUNT(DISTINCT id_section)  AS nb_sections,
+                SUM(fin_total_cotis)        AS total_cotis,
+                SUM(fin_total_dons)         AS total_dons,
+                SUM(fin_cotis_dues)         AS total_dues,
+                SUM(fin_ristourne)          AS total_ristourne,
+                SUM(fin_burnatexec)         AS part_ben,
+                SUM(fin_fedcorresp)         AS part_federations,
+                SUM(fin_sectcorresp)        AS part_sections,
+                SUM(fin_total_cotis) + SUM(fin_total_dons) AS total_entrees
+             FROM tab_finance
+             WHERE annee_finance = ?',
+            [$annee]
+        );
+
+        // Détail par fédération
+        $parFederation = $this->connection->fetchAllAssociative(
+            'SELECT
+                f.id_federation,
+                f.federation,
+                f.nom_complet,
+                COUNT(DISTINCT tf.id_section) AS nb_sections,
+                SUM(tf.fin_total_cotis)        AS total_cotis,
+                SUM(tf.fin_total_dons)         AS total_dons,
+                SUM(tf.fin_burnatexec)         AS part_ben,
+                SUM(tf.fin_fedcorresp)         AS part_fed,
+                SUM(tf.fin_sectcorresp)        AS part_sections
+             FROM tab_finance tf
+             LEFT JOIN comitemaore_federations f ON tf.id_federation = f.id_federation
+             WHERE tf.annee_finance = ?
+             GROUP BY f.id_federation, f.federation, f.nom_complet
+             ORDER BY SUM(tf.fin_burnatexec) DESC',
+            [$annee]
+        );
+
+        // Évolution annuelle (toutes années disponibles)
+        $evolution = $this->connection->fetchAllAssociative(
+            'SELECT
+                annee_finance,
+                SUM(fin_total_cotis)   AS total_cotis,
+                SUM(fin_total_dons)    AS total_dons,
+                SUM(fin_burnatexec)    AS part_ben,
+                SUM(fin_fedcorresp)    AS part_federations,
+                SUM(fin_sectcorresp)   AS part_sections,
+                COUNT(DISTINCT id_section) AS nb_sections
+             FROM tab_finance
+             GROUP BY annee_finance
+             ORDER BY annee_finance DESC
+             LIMIT 10'
+        );
+
+        // Top 10 opérations récentes (toutes sections)
+        $dernieres = $this->connection->fetchAllAssociative(
+            'SELECT f.*, a.nom_adht, a.prenom_adht, a.NIN_adh,
+                    s.section AS nom_section, fed.federation AS nom_federation
+             FROM finance_adh f
+             LEFT JOIN comitemaore_adherent a   ON f.id_adht = a.id_adht
+             LEFT JOIN comitemaore_sections s   ON f.id_section = s.id_section
+             LEFT JOIN comitemaore_federations fed ON s.id_federation = fed.id_federation
+             WHERE (? = 0 OR f.annee_cotisation = ?)
+             ORDER BY f.date_enregistrement DESC
+             LIMIT 20',
+            [$annee, $annee]
+        );
+
+        $annees = $this->connection->fetchFirstColumn(
+            'SELECT DISTINCT annee_finance FROM tab_finance ORDER BY annee_finance DESC'
+        );
+
+        return $this->render('finance/bureau_national.html.twig', [
+            'totaux'         => $totaux,
+            'par_federation' => $parFederation,
+            'evolution'      => $evolution,
+            'dernieres'      => $dernieres,
+            'annee'          => $annee,
+            'annees'         => $annees,
+            'is_admin'       => $this->isGranted('ROLE_ADMIN'),
+        ]);
+    }
+
+    // ------------------------------------------------------------------
+    // FICHE FINANCIÈRE D'UN ADHÉRENT — complète
+    // ------------------------------------------------------------------
+    #[Route('/{idAdht}', name: 'app_finance_show', methods: ['GET'], requirements: ['idAdht' => '\d+'])]
+    public function show(int $idAdht, Request $request): Response
     {
         $adherent = $this->connection->fetchAssociative(
-            'SELECT * FROM comitemaore_adherent WHERE id_adht = ?', [$idAdht]
+            'SELECT a.*, s.section AS nom_section, s.id_section,
+                    f.federation AS nom_federation, f.id_federation
+             FROM comitemaore_adherent a
+             LEFT JOIN comitemaore_sections s    ON a.id_section = s.id_section
+             LEFT JOIN comitemaore_federations f ON s.id_federation = f.id_federation
+             WHERE a.id_adht = ?',
+            [$idAdht]
         );
         if (!$adherent) throw $this->createNotFoundException();
 
-        $current = $this->currentAdherent();
-        $error   = null;
-
-        // Cotisations dues disponibles
-        $cotisationsDues = $this->connection->fetchAllAssociative(
-            "SELECT * FROM comitemaore_cotisation_due
-             WHERE id_adht = ? AND statut != 'soldee'
-             ORDER BY annee", [$idAdht]
+        // Toutes les opérations
+        $operations = $this->connection->fetchAllAssociative(
+            'SELECT * FROM finance_adh
+             WHERE id_adht = ?
+             ORDER BY date_operation DESC, id_fin_adh DESC',
+            [$idAdht]
         );
 
-        if ($request->isMethod('POST')) {
-            $typeOp = $request->request->get('type_operation');
+        // Soldes globaux
+        $soldes = $this->connection->fetchAssociative(
+            'SELECT
+                COUNT(*)                                                        AS nb_operations,
+                SUM(CASE WHEN type_operation = "cotisation"        THEN montant ELSE 0 END) AS cotisations,
+                SUM(CASE WHEN type_operation = "don"               THEN montant ELSE 0 END) AS dons,
+                SUM(CASE WHEN type_operation = "ristourne"         THEN montant ELSE 0 END) AS ristournes,
+                SUM(CASE WHEN type_operation = "renouvellement_carte" THEN montant ELSE 0 END) AS renouvellements,
+                SUM(CASE WHEN type_operation = "cotisation_due"    THEN montant ELSE 0 END) AS cotis_dues_montant,
+                SUM(CASE WHEN type_operation = "note"              THEN montant ELSE 0 END) AS notes_montant,
+                SUM(montant_burnatexec)  AS vers_ben,
+                SUM(montant_fedcorresp)  AS vers_fed,
+                SUM(montant_sectcorresp) AS vers_section,
+                SUM(montant)             AS total,
+                MIN(date_operation)      AS premiere_operation,
+                MAX(date_operation)      AS derniere_operation
+             FROM finance_adh WHERE id_adht = ?',
+            [$idAdht]
+        );
 
-            try {
-                $this->connection->beginTransaction();
-                $finData = $this->buildFinanceData($request, $idAdht, $adherent, $current);
+        // Résumé par année
+        $parAnnee = $this->connection->fetchAllAssociative(
+            'SELECT
+                annee_cotisation                                                      AS annee,
+                COUNT(*)                                                              AS nb_ops,
+                SUM(CASE WHEN type_operation = "cotisation" THEN montant ELSE 0 END) AS cotisations,
+                SUM(CASE WHEN type_operation = "don"        THEN montant ELSE 0 END) AS dons,
+                SUM(CASE WHEN type_operation = "ristourne"  THEN montant ELSE 0 END) AS ristournes,
+                SUM(montant_burnatexec)                                               AS vers_ben,
+                SUM(montant)                                                          AS total
+             FROM finance_adh
+             WHERE id_adht = ? AND annee_cotisation IS NOT NULL
+             GROUP BY annee_cotisation
+             ORDER BY annee_cotisation DESC',
+            [$idAdht]
+        );
 
-                // Insérer dans finance_adh
-                $this->connection->insert('finance_adh', $finData);
-                $idFinAdh = (int) $this->connection->lastInsertId();
+        // Cotisations dues
+        $cotisationsDues = $this->connection->fetchAllAssociative(
+            "SELECT *,
+                    montant_du - montant_paye AS solde_calcule
+             FROM comitemaore_cotisation_due
+             WHERE id_adht = ?
+             ORDER BY annee DESC",
+            [$idAdht]
+        );
 
-                // Répartition cotisation dans tab_finance
-                if (in_array($typeOp, ['cotisation', 'cotisation_due']) && $finData['montant'] > 0) {
-                    $this->repartirCotisation($finData['montant'], $adherent);
-                }
+        // Cotisations non soldées (due ou partiellement payée)
+        $duesNonReglees = array_values(array_filter(
+            $cotisationsDues,
+            fn($d) => in_array($d['statut'], ['due', 'partiellement_payee'])
+        ));
 
-                // Marquer cotisation due comme soldée si applicable
-                if ($typeOp === 'cotisation_due') {
-                    $idDue = $request->request->getInt('id_cotis_due');
-                    $idDue = (is_numeric($id)) ? (int) $idDue : null;
+        // Opérations par type pour le graphique textuel
+        $parType = $this->connection->fetchAllAssociative(
+            'SELECT type_operation,
+                    COUNT(*)     AS nb,
+                    SUM(montant) AS total
+             FROM finance_adh
+             WHERE id_adht = ?
+             GROUP BY type_operation
+             ORDER BY total DESC',
+            [$idAdht]
+        );
 
-                    if ($idDue) {
-                        $this->connection->update('comitemaore_cotisation_due', [
-                            'montant_paye'  => $this->connection->fetchOne(
-                                'SELECT montant_du FROM comitemaore_cotisation_due WHERE id_cotis_due = ?', [$idDue]
-                            ),
-                            'statut' => 'soldee',
-                        ], ['id_cotis_due' => $idDue]);
-                    }
-                }
-
-                // Renouvellement carte
-                if ($typeOp === 'renouvellement_carte') {
-                    $this->connection->update('comitemaore_adherent', [
-                        'date_echeance_cotis' => $finData['date_renouvellement'],
-                        'cotis_adht'          => 'Oui',
-                    ], ['id_adht' => $idAdht]);
-                }
-
-                $this->connection->commit();
-                $this->logService->log("finance_{$typeOp}", 'succes', 'finance', $idFinAdh,
-                    ['montant' => $finData['montant']], $current['id_adht'] ?? null, $current['login_adht'] ?? null);
-
-                $this->addFlash('success', 'Opération enregistrée avec succès.');
-                return $this->redirectToRoute('app_finance_show', ['idAdht' => $idAdht]);
-
-            } catch (\Exception $e) {
-                $this->connection->rollBack();
-                $error = 'Erreur lors de l\'enregistrement : ' . $e->getMessage();
-            }
-        }
-
-        return $this->render('finance/operation.html.twig', [
+        return $this->render('finance/show.html.twig', [
             'adherent'         => $adherent,
+            'operations'       => $operations,
+            'soldes'           => $soldes,
+            'par_annee'        => $parAnnee,
+            'par_type'         => $parType,
             'cotisations_dues' => $cotisationsDues,
+            'dues_non_reglees' => array_values($duesNonReglees),
             'is_admin'         => $this->isGranted('ROLE_ADMIN'),
-            'current'          => $current,
-            'error'            => $error,
-            'annee_courante'   => (int) date('Y'),
         ]);
     }
 
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
-    private function buildFinanceData(Request $req, int $idAdht, array $adherent, ?array $current): array
+    private function getAnnees(string $type, int $id): array
     {
-        $typeOp  = $req->request->get('type_operation');
-        $montant = (float) str_replace(',', '.', $req->request->get('montant', '0'));
-
-        $data = [
-            'id_adht'             => $idAdht,
-            'id_section'          => $adherent['id_section'],
-            'type_operation'      => $typeOp,
-            'montant'             => $montant,
-            'montant_burnatexec'  => 0,
-            'montant_fedcorresp'  => 0,
-            'montant_sectcorresp' => 0,
-            'date_operation'      => $req->request->get('date_operation') ?: date('Y-m-d'),
-            'date_renouvellement' => $req->request->get('date_renouvellement') ?: null,
-            'annee_cotisation'    => $req->request->get('annee_cotisation') ?: null,
-            'nature_don'          => $req->request->get('nature_don', ''),
-            'note'                => $req->request->get('note', ''),
-            'cotis_due_payee'     => 0,
-            'id_fin_due_regle'    => $req->request->getInt('id_cotis_due') ?: null,
-            'enregistre_par'      => $current['id_adht'] ?? null,
-            'date_enregistrement' => (new \DateTime())->format('Y-m-d H:i:s'),
-        ];
-
-        if (in_array($typeOp, ['cotisation', 'cotisation_due']) && $montant > 0) {
-            $data['montant_burnatexec']  = round($montant * 0.50, 2);
-            $data['montant_fedcorresp']  = round($montant * 0.30, 2);
-            $data['montant_sectcorresp'] = round($montant * 0.20, 2);
-        }
-
-        if ($typeOp === 'cotisation_due') {
-            $data['cotis_due_payee'] = 1;
-        }
-
-        return $data;
-    }
-
-    private function repartirCotisation(float $montant, array $adherent): void
-    {
-        $annee     = (int) date('Y');
-        $idSection = $adherent['id_section'];
-
-        // Upsert dans tab_finance
-        $existing = $this->connection->fetchAssociative(
-            'SELECT * FROM tab_finance WHERE id_section = ? AND annee_finance = ?',
-            [$idSection, $annee]
-        );
-
-        $bne  = round($montant * 0.50, 2);
-        $fed  = round($montant * 0.30, 2);
-        $sect = round($montant * 0.20, 2);
-
-        if ($existing) {
-            $this->connection->executeStatement(
-                'UPDATE tab_finance SET
-                    fin_burnatexec  = fin_burnatexec  + ?,
-                    fin_fedcorresp  = fin_fedcorresp  + ?,
-                    fin_sectcorresp = fin_sectcorresp + ?,
-                    fin_total_cotis = fin_total_cotis + ?
-                 WHERE id_section = ? AND annee_finance = ?',
-                [$bne, $fed, $sect, $montant, $idSection, $annee]
+        if ($type === 'section') {
+            return $this->connection->fetchFirstColumn(
+                'SELECT DISTINCT annee_finance FROM tab_finance
+                 WHERE id_section = ? ORDER BY annee_finance DESC', [$id]
             );
-        } else {
-            $this->connection->insert('tab_finance', [
-                'id_section'      => $idSection,
-                'annee_finance'   => $annee,
-                'fin_burnatexec'  => $bne,
-                'fin_fedcorresp'  => $fed,
-                'fin_sectcorresp' => $sect,
-                'fin_total_cotis' => $montant,
-            ]);
         }
+        return $this->connection->fetchFirstColumn(
+            'SELECT DISTINCT annee_finance FROM tab_finance
+             WHERE id_federation = ? ORDER BY annee_finance DESC', [$id]
+        );
     }
 }

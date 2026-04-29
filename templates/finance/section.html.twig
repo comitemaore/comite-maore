@@ -5,7 +5,7 @@
 
 {% block navbar %}
 <nav class="navbar">
-    <a class="navbar-brand" href="{{ path('app_dashboard') }}"> Comité Maoré</a>
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
     <div class="navbar-right">
         <a href="{{ path('app_finance_ben') }}" class="btn btn-secondary btn-sm">📊 BEN</a>
         <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
@@ -91,7 +91,7 @@
             ] %}
             <div class="card" style="text-align:center;padding:14px;">
                 <div style="font-size:11px;opacity:.5;text-transform:uppercase;margin-bottom:4px;">{{ label }}</div>
-                <div style="font-size:20px;font-weight:700;color:{{ color|default('#000') }};">
+                <div style="font-size:20px;font-weight:700;color:{{ color }};">
                     {{ val|number_format(2, ',', ' ') }} €
                 </div>
             </div>

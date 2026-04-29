@@ -1,0 +1,213 @@
+{# templates/fiche/section.html.twig #}
+{% extends 'base.html.twig' %}
+{% block title %}Section {{ section.section }} — Comité Maoré{% endblock %}
+{% block body_theme %}{{ is_admin ? 'dark' : 'sky' }}{% endblock %}
+
+{% block navbar %}
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ path('app_dashboard') }}">🌿 Comité Maoré</a>
+    <div class="navbar-right">
+        <span style="font-size:13px;opacity:.8;">{{ app.user.userIdentifier }}</span>
+        {% if is_admin %}<span class="badge badge-admin">ADMIN</span>
+        {% else %}<span class="badge badge-user">USER</span>{% endif %}
+        <a href="{{ path('app_logout') }}" class="btn btn-danger btn-sm">Déconnexion</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block body %}
+<div class="layout">
+    <aside class="sidebar">
+        <a href="{{ path('app_dashboard') }}">📊 Tableau de bord</a>
+        <a href="{{ path('app_adherent_list') }}">👥 Adhérents</a>
+        <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
+        <a href="{{ path('app_finance_ben') }}">💰 Finances BEN</a>
+        {% if is_admin %}
+            <a href="{{ path('app_log_list') }}">📋 Logs</a>
+        {% endif %}
+        <hr style="margin:16px 20px;border:none;border-top:1px solid rgba(255,255,255,.15);">
+        <a href="{{ path('app_logout') }}">🚪 Déconnexion</a>
+    </aside>
+
+    <main class="main-content">
+
+        {# En-tête #}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+            <div>
+                <div style="font-size:12px;opacity:.4;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;">
+                    Fiche section
+                </div>
+                <h1 style="font-size:24px;font-weight:700;margin-bottom:4px;">
+                    📍 {{ section.section }}
+                </h1>
+                <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;align-items:center;">
+                    {% if section.nom_federation %}
+                        <a href="{{ path('app_fiche_federation', {id: section.id_federation}) }}"
+                           style="font-size:12px;padding:3px 10px;border-radius:5px;
+                                  background:rgba(99,179,237,.12);color:#90cdf4;
+                                  text-decoration:none;border:1px solid rgba(99,179,237,.2);">
+                            🏘 {{ section.nom_federation }}
+                            {% if section.nom_complet_federation %}
+                                — {{ section.nom_complet_federation }}
+                            {% endif %}
+                        </a>
+                    {% endif %}
+                    <span style="font-size:12px;padding:3px 10px;border-radius:5px;background:rgba(255,255,255,.07);">
+                        {{ adherents|length }} adhérent(s)
+                    </span>
+                    <span style="font-size:12px;padding:3px 10px;border-radius:5px;
+                                 background:rgba(104,211,145,.1);color:#9ae6b4;">
+                        {{ nb_cotisants }} cotisant(s)
+                    </span>
+                    <span style="font-size:11px;opacity:.4;">id_section : {{ section.id_section }}</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                {# Lien état financier #}
+                <a href="{{ path('app_finance_section', {idSection: section.id_section}) }}"
+                   class="btn btn-sm"
+                   style="background:rgba(104,211,145,.15);color:#9ae6b4;border:1px solid rgba(104,211,145,.3);">
+                    💰 État financier
+                </a>
+                {% if is_admin %}
+                <a href="{{ path('app_organigramme_section', {id: section.id_section}) }}"
+                   class="btn btn-primary btn-sm">✏️ Modifier</a>
+                {% endif %}
+                <a href="{{ path('app_organigramme') }}" class="btn btn-secondary btn-sm">← Organigramme</a>
+            </div>
+        </div>
+
+        {# Bureau de la section #}
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-title">👥 Bureau de la section</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                {% for col, membre in membres %}
+                <div style="padding:12px;border-radius:8px;
+                            background:{{ membre.adherent ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.02)' }};
+                            border:1px solid rgba(255,255,255,{{ membre.adherent ? '.1' : '.05' }});">
+                    <div style="font-size:10px;font-weight:600;opacity:.4;text-transform:uppercase;
+                                letter-spacing:.05em;margin-bottom:6px;">
+                        {{ membre.label }}
+                    </div>
+                    {% if membre.adherent %}
+                        <div style="font-size:14px;font-weight:600;">
+                            <a href="{{ path('app_adherent_show', {id: membre.adherent.id_adht}) }}"
+                               style="color:inherit;text-decoration:none;">
+                                {{ membre.adherent.nom_adht }} {{ membre.adherent.prenom_adht }}
+                            </a>
+                        </div>
+                        <div style="font-size:11px;font-family:monospace;opacity:.5;margin-top:2px;">
+                            {{ membre.adherent.NIN_adh ?? '—' }}
+                        </div>
+                        {% if membre.adherent.profession_adht %}
+                            <div style="font-size:11px;opacity:.4;margin-top:2px;">
+                                {{ membre.adherent.profession_adht }}
+                            </div>
+                        {% endif %}
+                        {% if membre.adherent.email_adht %}
+                            <div style="font-size:11px;opacity:.5;margin-top:4px;">
+                                <a href="mailto:{{ membre.adherent.email_adht }}"
+                                   style="color:#90cdf4;">{{ membre.adherent.email_adht }}</a>
+                            </div>
+                        {% endif %}
+                        {% if membre.adherent.telephonep_adht %}
+                            <div style="font-size:11px;opacity:.4;margin-top:2px;">
+                                📞 {{ membre.adherent.telephonep_adht }}
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div style="font-size:13px;opacity:.25;font-style:italic;">Non attribué</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# Liste des adhérents #}
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+            <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);
+                        display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-weight:600;">
+                    Adhérents de la section
+                    <span style="font-size:12px;opacity:.5;margin-left:6px;">
+                        {{ adherents|length }} au total · {{ nb_cotisants }} cotisant(s)
+                    </span>
+                </span>
+                {% if is_admin %}
+                <a href="{{ path('app_adherent_new') }}" class="btn btn-success btn-sm">+ Ajouter</a>
+                {% endif %}
+            </div>
+            {% if adherents|length > 0 %}
+            <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>NIN</th>
+                            <th>Nom</th>
+                            <th>Prénom</th>
+                            <th>Email</th>
+                            <th>Profession</th>
+                            <th>Cotisant</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for adh in adherents %}
+                        <tr>
+                            <td style="font-family:monospace;font-size:11px;">{{ adh.NIN_adh ?? '—' }}</td>
+                            <td><strong>{{ adh.nom_adht }}</strong></td>
+                            <td>{{ adh.prenom_adht }}</td>
+                            <td style="font-size:12px;">
+                                {% if adh.email_adht %}
+                                    <a href="mailto:{{ adh.email_adht }}"
+                                       style="color:#90cdf4;">{{ adh.email_adht }}</a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td style="font-size:12px;opacity:.7;">{{ adh.profession_adht ?: '—' }}</td>
+                            <td>
+                                {% if adh.cotis_adht == 'Oui' %}
+                                    <span class="badge" style="background:#276749;color:#9ae6b4;">✓ Oui</span>
+                                {% else %}
+                                    <span class="badge" style="background:#742a2a;color:#fc8181;">✗ Non</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ path('app_adherent_show', {id: adh.id_adht}) }}"
+                                   class="btn btn-secondary btn-sm">👁</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <p style="padding:20px;opacity:.3;text-align:center;font-style:italic;">
+                    Aucun adhérent dans cette section.
+                </p>
+            {% endif %}
+        </div>
+
+        {# Lien finances mis en avant #}
+        <div style="padding:16px;border-radius:8px;
+                    background:rgba(104,211,145,.08);border:1px solid rgba(104,211,145,.2);
+                    display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:14px;font-weight:600;color:#9ae6b4;">💰 État financier de la section</div>
+                <div style="font-size:12px;opacity:.5;margin-top:2px;">
+                    Cotisations, dons, répartition 50/30/20% — Section {{ section.section }}
+                </div>
+            </div>
+            <a href="{{ path('app_finance_section', {idSection: section.id_section}) }}"
+               class="btn btn-sm"
+               style="background:#276749;color:#9ae6b4;border:1px solid rgba(104,211,145,.4);">
+                Voir l'état financier →
+            </a>
+        </div>
+
+    </main>
+</div>
+<style>
+    body.theme-dark .btn-primary { background:#4299e1;color:#fff; }
+    body.theme-sky  .btn-primary { background:#2b6cb0;color:#fff; }
+</style>
+{% endblock %}

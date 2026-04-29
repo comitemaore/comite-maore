@@ -37,6 +37,7 @@
             🔍 Recherche
         </a>
         {% if is_admin %}
+        <a href="{{ path('app_organigramme') }}">🏛 Organigramme</a>
         <a href="{{ path('app_schema') }}">🗂 Schéma BDD</a>
         <a href="{{ path('app_import') }}">📥 Import CSV</a>
         <a href="{{ path('app_database') }}">
