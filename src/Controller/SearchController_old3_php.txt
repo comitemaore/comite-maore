@@ -153,37 +153,17 @@ class SearchController extends AbstractController
     #[Route('/search/colonnes/{table}', name: 'app_search_colonnes', methods: ['GET'])]
     public function colonnes(string $table): JsonResponse
     {
-        if (empty($table)) {
-            return new JsonResponse([]);
-        }
-
         try {
-            $schemaManager = $this->connection->createSchemaManager();
-
-            // Vérifier que la table existe
-            $tables = $schemaManager->listTableNames();
-            if (!in_array($table, $tables, true)) {
-                return new JsonResponse(['erreur' => "Table '$table' introuvable."], 404);
-            }
-
-            $cols = array_map(function($c) {
-                // getType()->getName() supprimé en DBAL 4 — utiliser ReflectionClass
-                try {
-                    $typeName = $c->getType()->getName();
-                } catch (\Throwable) {
-                    $typeName = (new \ReflectionClass($c->getType()))->getShortName();
-                    $typeName = strtolower(str_replace('Type', '', $typeName));
-                }
-                return [
+            $cols = array_map(
+                fn($c) => [
                     'nom'  => $c->getName(),
-                    'type' => $typeName,
-                ];
-            }, $schemaManager->listTableColumns($table));
-
-            return new JsonResponse(array_values($cols));
-
-        } catch (\Exception $e) {
-            return new JsonResponse(['erreur' => $e->getMessage()], 500);
+                    'type' => $c->getType()->getName(),
+                ],
+                $this->connection->createSchemaManager()->listTableColumns($table)
+            );
+            return new JsonResponse($cols);
+        } catch (\Exception) {
+            return new JsonResponse([]);
         }
     }
 

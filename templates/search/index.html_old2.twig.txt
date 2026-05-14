@@ -78,7 +78,7 @@
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:12px;">Table</label>
                         <select name="table" id="tableSelect" class="form-control" required
-                                onchange="chargerColonnes(this.value, null)">
+                                onchange="chargerColonnes(this.value)">
                             <option value="">-- Choisir --</option>
                             {% for t in tables %}
                                 <option value="{{ t }}" {{ table == t ? 'selected' : '' }}>{{ t }}</option>
@@ -257,7 +257,7 @@
 
 <script>
 const AUTOCOMPLETE_URL = '{{ path("app_search_autocomplete") }}';
-const COLONNES_BASE    = '{{ path("app_search_colonnes", {table: "PLACEHOLDER"}) }}'.replace('PLACEHOLDER', '');
+const COLONNES_URL     = '{{ path("app_search_colonnes", {table: "__TABLE__"}) }}';
 let timerGlobal, timerChamp;
 
 // ---- Pagination ----
@@ -267,47 +267,26 @@ function goToPage(p) {
 }
 
 // ---- Charger colonnes dynamiquement quand table change ----
-async function chargerColonnes(table, colonneARestaurer) {
+async function chargerColonnes(table) {
     const sel = document.getElementById('columnSelect');
-    // Indiquer le chargement
-    sel.innerHTML = '<option value="">⏳ Chargement...</option>';
-    sel.disabled  = true;
-
-    if (!table) {
-        sel.innerHTML = '<option value="*">* (toutes)</option>';
-        sel.disabled  = false;
-        return;
-    }
+    sel.innerHTML = '<option value="*">* (toutes)</option>';
+    if (!table) return;
 
     try {
-        const url  = '{{ path("app_search_colonnes", {table: "_"}) }}'.replace('_', encodeURIComponent(table));
+        const url  = COLONNES_URL.replace('__TABLE__', encodeURIComponent(table));
         const resp = await fetch(url);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const cols = await resp.json();
-
-        sel.innerHTML = '<option value="*">* (toutes les colonnes)</option>';
         cols.forEach(c => {
-            const opt       = document.createElement('option');
+            const opt = document.createElement('option');
             opt.value       = c.nom;
-            opt.textContent = c.nom + '  [' + c.type + ']';
-            // Restaurer la sélection précédente si disponible
-            if (colonneARestaurer && c.nom === colonneARestaurer) {
-                opt.selected = true;
-            }
+            opt.textContent = c.nom + ' (' + c.type + ')';
             sel.appendChild(opt);
         });
-    } catch(e) {
-        sel.innerHTML = '<option value="*">* (toutes) — erreur chargement</option>';
-        console.warn('chargerColonnes error:', e);
-    }
+    } catch(e) {}
 
-    sel.disabled = false;
-
-    // Ne réinitialiser la valeur que si on change de table (pas au chargement initial)
-    if (!colonneARestaurer) {
-        document.getElementById('valueInput').value = '';
-        fermerSuggestions('champSuggestions');
-    }
+    // Réinitialiser le champ valeur et fermer suggestions
+    document.getElementById('valueInput').value = '';
+    fermerSuggestions('champSuggestions');
 }
 
 // ---- Autocomplétion champ valeur (table sélectionnée) ----
@@ -428,17 +407,6 @@ function surligner(texte, q) {
     const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
     return texte.replace(re, '<mark>$1</mark>');
 }
-
-// ---- Au chargement : si une table est déjà sélectionnée (résultat POST), charger ses colonnes ----
-document.addEventListener('DOMContentLoaded', () => {
-    const sel   = document.getElementById('tableSelect');
-    const table = sel ? sel.value : '';
-    if (table) {
-        // Restaurer la colonne qui était sélectionnée avant soumission
-        const colonneActuelle = '{{ column|default("*") }}';
-        chargerColonnes(table, colonneActuelle === '*' ? null : colonneActuelle);
-    }
-});
 
 // Fermer les suggestions en cliquant ailleurs
 document.addEventListener('click', e => {

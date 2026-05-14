@@ -16,9 +16,9 @@ class AdherentFonctionService
     private const FONCTIONS = [
         'president'          => 'Président',
         'vice_president'     => 'Vice-président',
-        'secretaire'         => 'Secrétaire Adj. Chg. Com.',
+        'secretaire'         => 'Secrétaire',
         'tresorier'          => 'Trésorier',
-        'secretaire_adjoint' => 'Secrétaire Adj. Chg. Rec.',
+        'secretaire_adjoint' => 'Secrétaire adjoint',
         'tresorier_adjoint'  => 'Trésorier adjoint',
         'administrateur1'    => 'Administrateur 1',
         'administrateur2'    => 'Administrateur 2',
